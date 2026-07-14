@@ -182,6 +182,7 @@ export default function App() {
   const [openEntry, setOpenEntry] = useState(null);
   const [sessionSaved, setSessionSaved] = useState(false);
   const [mode, setMode] = useState(null);
+  const [currentEntryId, setCurrentEntryId] = useState(null);
   const bottomRef = useRef(null);
   const taRef = useRef(null);
 
@@ -225,7 +226,9 @@ export default function App() {
       const reply = data?.content?.[0]?.text ?? '';
       if (!reply) throw new Error('Empty reply');
 
-      setMessages([...history, { role: 'assistant', content: reply }]);
+      const finalMessages = [...history, { role: 'assistant', content: reply }];
+      setMessages(finalMessages);
+      upsertSession(finalMessages);
     } catch (e) {
       setErrorMsg(String(e.message || e));
     } finally {
@@ -237,7 +240,7 @@ export default function App() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
-  function doSaveSession(msgs) {
+  function upsertSession(msgs) {
     if (msgs.length < 2) return;
     const dreamText = msgs[0]?.role === 'user' ? msgs[0].content : '';
     const allText = msgs.map(m => m.content).join(' ').toLowerCase();
@@ -253,27 +256,43 @@ export default function App() {
     }
     const lastUser = [...msgs].reverse().find(m => m.role === 'user' && msgs.indexOf(m) > 0);
     const closingWord = lastUser && lastUser.content.split(' ').length <= 8 ? lastUser.content : '';
-    const entry = {
-      id: Date.now().toString(),
-      savedAt: Date.now(),
-      title: dreamText.split(' ').slice(0, 6).join(' ') + '…',
-      dreamText,
-      messages: msgs,
-      stage,
-      closingWord,
-    };
-    const updated = [...journal, entry];
-    setJournal(updated);
-    saveJournal(updated);
+
+    setJournal(prevJournal => {
+      let updated;
+      if (currentEntryId && prevJournal.some(e => e.id === currentEntryId)) {
+        // Update existing entry in place
+        updated = prevJournal.map(e => e.id === currentEntryId
+          ? { ...e, messages: msgs, stage, closingWord }
+          : e
+        );
+      } else {
+        // Create new entry
+        const newId = Date.now().toString();
+        const entry = {
+          id: newId,
+          savedAt: Date.now(),
+          title: dreamText.split(' ').slice(0, 6).join(' ') + '…',
+          dreamText,
+          messages: msgs,
+          stage,
+          closingWord,
+          mode,
+        };
+        updated = [...prevJournal, entry];
+        setCurrentEntryId(newId);
+      }
+      saveJournal(updated);
+      return updated;
+    });
     setSessionSaved(true);
   }
 
   function newSession() {
-    if (messages.length >= 2 && !sessionSaved) doSaveSession(messages);
     setMessages([]);
     setErrorMsg('');
     setSessionSaved(false);
     setMode(null);
+    setCurrentEntryId(null);
     if (taRef.current) { taRef.current.value = ''; taRef.current.style.height = '48px'; }
   }
 
@@ -384,13 +403,7 @@ export default function App() {
 
             {errorMsg && <div style={{ margin:'0 0 20px 36px', padding:'10px 14px', background:'rgba(180,60,60,0.12)', border:'1px solid rgba(180,60,60,0.3)', borderRadius:6, fontSize:12, color:'#D08080', fontFamily:'monospace', wordBreak:'break-all' }}>{errorMsg}</div>}
 
-            {messages.length >= 8 && !sessionSaved && !loading && (
-              <div style={{ textAlign:'center', margin:'8px 0 20px' }}>
-                <button onClick={() => doSaveSession(messages)} style={{ background:'rgba(201,168,76,0.08)', border:'1px solid rgba(201,168,76,0.25)', color:'rgba(201,168,76,0.7)', fontSize:11, fontFamily:'system-ui,sans-serif', letterSpacing:'0.07em', textTransform:'uppercase', padding:'5px 14px', borderRadius:4, cursor:'pointer' }}>Save to journal</button>
-              </div>
-            )}
-
-            {sessionSaved && <div style={{ textAlign:'center', margin:'0 0 16px', fontSize:11, fontFamily:'system-ui,sans-serif', color:'rgba(201,168,76,0.45)', letterSpacing:'0.06em' }}>Session saved to journal</div>}
+            {sessionSaved && !loading && <div style={{ textAlign:'center', margin:'0 0 16px', fontSize:11, fontFamily:'system-ui,sans-serif', color:'rgba(201,168,76,0.4)', letterSpacing:'0.06em' }}>✓ Saved to journal</div>}
 
             <div ref={bottomRef} />
           </div>
