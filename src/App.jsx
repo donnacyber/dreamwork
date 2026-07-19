@@ -31,6 +31,28 @@ function saveJournal(entries) {
   } catch (e) { console.error('Save failed', e); }
 }
 
+// ─── ACTIVE SESSION TRACKING ─────────────────────────────────────────────────
+// Tracks the session currently in progress, separate from the permanent journal,
+// so a session can be resumed if the app is closed without an explicit "New session".
+function loadActiveSession() {
+  try {
+    const raw = localStorage.getItem('dreamwork_active_session');
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveActiveSession(session) {
+  try {
+    localStorage.setItem('dreamwork_active_session', JSON.stringify(session));
+  } catch (e) { console.error('Active session save failed', e); }
+}
+
+function clearActiveSession() {
+  try {
+    localStorage.removeItem('dreamwork_active_session');
+  } catch (e) { console.error('Active session clear failed', e); }
+}
+
 // ─── TEXT RENDERER ───────────────────────────────────────────────────────────
 function renderText(text) {
   const blocks = text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
@@ -160,7 +182,7 @@ function EntryDetail({ entry, onBack, onSave }) {
               <div key={i} style={{ marginBottom:14 }}>
                 {m.role === 'user'
                   ? <div style={{ display:'flex', justifyContent:'flex-end' }}><div style={{ maxWidth:'85%', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'10px 10px 2px 10px', padding:'9px 13px', fontSize:13, color:'#C8C0B0', fontFamily:'system-ui,sans-serif', whiteSpace:'pre-wrap', lineHeight:1.6 }}>{m.content}</div></div>
-                  : <div style={{ fontSize:13, color:C.text, lineHeight:1.75, fontFamily:'Georgia,serif', borderLeft:'2px solid rgba(201,168,76,0.2)', paddingLeft:12 }}>{m.content.slice(0, 400)}{m.content.length > 400 ? '…' : ''}</div>
+                  : <div style={{ fontSize:14, lineHeight:1.75, fontFamily:'Georgia,serif', borderLeft:'2px solid rgba(201,168,76,0.2)', paddingLeft:14 }}>{renderText(m.content)}</div>
                 }
               </div>
             ))}
@@ -183,12 +205,34 @@ export default function App() {
   const [sessionSaved, setSessionSaved] = useState(false);
   const [mode, setMode] = useState(null);
   const [currentEntryId, setCurrentEntryId] = useState(null);
+  const [resumeAvailable, setResumeAvailable] = useState(null); // holds the pending active session, if any
   const bottomRef = useRef(null);
   const taRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  // On load, check for an unfinished session to offer resuming
+  useEffect(() => {
+    const active = loadActiveSession();
+    if (active && active.messages && active.messages.length > 0) {
+      setResumeAvailable(active);
+    }
+  }, []);
+
+  function resumeSession() {
+    if (!resumeAvailable) return;
+    setMessages(resumeAvailable.messages);
+    setMode(resumeAvailable.mode || null);
+    setCurrentEntryId(resumeAvailable.entryId || null);
+    setResumeAvailable(null);
+  }
+
+  function dismissResume() {
+    clearActiveSession();
+    setResumeAvailable(null);
+  }
 
   async function send() {
     const text = input.trim();
@@ -282,6 +326,11 @@ export default function App() {
         setCurrentEntryId(newId);
       }
       saveJournal(updated);
+      // Track this as the in-progress session, so it can be resumed if the app is closed
+      const entryIdForActive = currentEntryId && prevJournal.some(e => e.id === currentEntryId)
+        ? currentEntryId
+        : updated[updated.length - 1].id;
+      saveActiveSession({ entryId: entryIdForActive, messages: msgs, mode });
       return updated;
     });
     setSessionSaved(true);
@@ -293,6 +342,8 @@ export default function App() {
     setSessionSaved(false);
     setMode(null);
     setCurrentEntryId(null);
+    setResumeAvailable(null);
+    clearActiveSession();
     if (taRef.current) { taRef.current.value = ''; taRef.current.style.height = '48px'; }
   }
 
@@ -344,7 +395,24 @@ export default function App() {
             {!hasMessages && (
               <div style={{ textAlign:'center', padding:'40px 16px' }}>
                 <div style={{ fontSize:34, opacity:0.2, marginBottom:18 }}>◯</div>
-                {!mode ? (
+                {resumeAvailable ? (
+                  <>
+                    <div style={{ fontSize:22, fontWeight:300, marginBottom:8 }}>Continue where you left off?</div>
+                    <div style={{ width:36, height:1, background:'rgba(201,168,76,0.3)', margin:'0 auto 16px' }} />
+                    <div style={{ fontSize:13, fontFamily:'system-ui,sans-serif', color:C.muted, lineHeight:1.7, maxWidth:320, margin:'0 auto 18px' }}>
+                      It looks like a {resumeAvailable.mode === 'sync' ? 'synchronicity' : 'dream'} session was still open when you last closed Dreamwork.
+                      {resumeAvailable.messages[0]?.content && (
+                        <div style={{ marginTop:10, fontSize:12, color:'rgba(200,192,176,0.7)', fontStyle:'italic', lineHeight:1.6 }}>
+                          "{resumeAvailable.messages[0].content.slice(0, 100)}{resumeAvailable.messages[0].content.length > 100 ? '…' : ''}"
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
+                      <button onClick={resumeSession} style={{ background:'rgba(201,168,76,0.12)', border:'1px solid rgba(201,168,76,0.4)', color:C.gold, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'9px 18px', borderRadius:8, cursor:'pointer' }}>Continue session</button>
+                      <button onClick={dismissResume} style={{ background:'none', border:'1px solid rgba(201,168,76,0.2)', color:C.muted, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'9px 18px', borderRadius:8, cursor:'pointer' }}>Start fresh</button>
+                    </div>
+                  </>
+                ) : !mode ? (
                   <>
                     <div style={{ fontSize:22, fontWeight:300, marginBottom:8 }}>What would you like to bring?</div>
                     <div style={{ width:36, height:1, background:'rgba(201,168,76,0.3)', margin:'0 auto 20px' }} />
