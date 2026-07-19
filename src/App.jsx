@@ -53,6 +53,26 @@ function clearActiveSession() {
   } catch (e) { console.error('Active session clear failed', e); }
 }
 
+// ─── DRAFT TEXT ──────────────────────────────────────────────────────────────
+// Saves whatever is currently typed in the input box, even before it's sent,
+// so nothing is lost if the app is closed mid-thought.
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem('dreamwork_draft');
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveDraft(text, mode) {
+  try {
+    if (!text) {
+      localStorage.removeItem('dreamwork_draft');
+    } else {
+      localStorage.setItem('dreamwork_draft', JSON.stringify({ text, mode, savedAt: Date.now() }));
+    }
+  } catch (e) { console.error('Draft save failed', e); }
+}
+
 // ─── TEXT RENDERER ───────────────────────────────────────────────────────────
 function renderText(text) {
   const blocks = text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
@@ -219,7 +239,30 @@ export default function App() {
     if (active && active.messages && active.messages.length > 0) {
       setResumeAvailable(active);
     }
+    // Restore any unsent typed text regardless — it belongs to whichever
+    // session (new or resumed) the person ends up in
+    const draft = loadDraft();
+    if (draft && draft.text) {
+      setInput(draft.text);
+      if (!active && draft.mode) setMode(draft.mode);
+    }
   }, []);
+
+  // Save draft text as it's typed, debounced slightly
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveDraft(input, mode);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [input, mode]);
+
+  // Keep textarea height in sync with content, including when restored from a draft
+  useEffect(() => {
+    if (taRef.current) {
+      taRef.current.style.height = '48px';
+      taRef.current.style.height = Math.min(taRef.current.scrollHeight, 140) + 'px';
+    }
+  }, [input]);
 
   function resumeSession() {
     if (!resumeAvailable) return;
@@ -338,13 +381,15 @@ export default function App() {
 
   function newSession() {
     setMessages([]);
+    setInput('');
     setErrorMsg('');
     setSessionSaved(false);
     setMode(null);
     setCurrentEntryId(null);
     setResumeAvailable(null);
     clearActiveSession();
-    if (taRef.current) { taRef.current.value = ''; taRef.current.style.height = '48px'; }
+    saveDraft('', null);
+    if (taRef.current) { taRef.current.style.height = '48px'; }
   }
 
   function updateEntry(updated) {
