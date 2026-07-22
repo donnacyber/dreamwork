@@ -73,6 +73,25 @@ function saveDraft(text, mode) {
   } catch (e) { console.error('Draft save failed', e); }
 }
 
+// ─── API KEY STORAGE ─────────────────────────────────────────────────────────
+// The user's own Anthropic API key, kept only on this device. Never sent
+// anywhere except directly to Anthropic when making a request.
+function loadApiKey() {
+  try {
+    return localStorage.getItem('dreamwork_api_key') || '';
+  } catch { return ''; }
+}
+
+function saveApiKey(key) {
+  try {
+    if (!key) {
+      localStorage.removeItem('dreamwork_api_key');
+    } else {
+      localStorage.setItem('dreamwork_api_key', key);
+    }
+  } catch (e) { console.error('API key save failed', e); }
+}
+
 // ─── TEXT RENDERER ───────────────────────────────────────────────────────────
 function renderText(text) {
   const blocks = text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
@@ -213,6 +232,71 @@ function EntryDetail({ entry, onBack, onSave }) {
   );
 }
 
+// ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
+function SettingsPanel({ apiKey, onSave }) {
+  const [keyInput, setKeyInput] = useState(apiKey || '');
+  const [saved, setSaved] = useState(false);
+  const [showGuide, setShowGuide] = useState(!apiKey);
+
+  function handleSave() {
+    onSave(keyInput.trim());
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  function handleRemove() {
+    setKeyInput('');
+    onSave('');
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:'20px' }}>
+      <div style={{ fontFamily:'system-ui,sans-serif', fontSize:11, color:'rgba(201,168,76,0.5)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:16 }}>Your API key</div>
+
+      <div style={{ fontSize:14, fontFamily:'system-ui,sans-serif', color:C.muted, lineHeight:1.7, marginBottom:18 }}>
+        Dreamwork connects directly from this device to Claude using your own key — never through a server, never seen by anyone else. It's stored only in this browser, the same way your journal is.
+      </div>
+
+      <label style={{ display:'block', fontSize:11, fontFamily:'system-ui,sans-serif', color:C.gold, letterSpacing:'0.06em', marginBottom:8 }}>API KEY</label>
+      <input
+        type="password"
+        value={keyInput}
+        onChange={e => setKeyInput(e.target.value)}
+        placeholder="sk-ant-..."
+        style={{ width:'100%', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(201,168,76,0.22)', borderRadius:8, padding:'12px 14px', color:C.text, fontFamily:'monospace', fontSize:13, outline:'none', marginBottom:12 }}
+      />
+
+      <div style={{ display:'flex', gap:10, marginBottom:24 }}>
+        <button onClick={handleSave} style={{ background:'rgba(201,168,76,0.12)', border:'1px solid rgba(201,168,76,0.4)', color:C.gold, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'9px 18px', borderRadius:8, cursor:'pointer' }}>Save key</button>
+        {apiKey && <button onClick={handleRemove} style={{ background:'none', border:'1px solid rgba(201,168,76,0.2)', color:C.muted, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'9px 18px', borderRadius:8, cursor:'pointer' }}>Remove key</button>}
+        {saved && <span style={{ fontSize:12, fontFamily:'system-ui,sans-serif', color:'rgba(201,168,76,0.6)', alignSelf:'center' }}>✓ Saved</span>}
+      </div>
+
+      <button onClick={() => setShowGuide(s => !s)} style={{ background:'none', border:'none', color:'rgba(201,168,76,0.6)', fontSize:12, fontFamily:'system-ui,sans-serif', cursor:'pointer', padding:0, marginBottom:14 }}>
+        {showGuide ? '− Hide guide' : "+ How do I get an API key?"}
+      </button>
+
+      {showGuide && (
+        <div style={{ background:'rgba(255,255,255,0.02)', border:`1px solid ${C.border}`, borderRadius:10, padding:'16px 18px', fontSize:13, fontFamily:'system-ui,sans-serif', color:'#C8C0B0', lineHeight:1.8 }}>
+          <p style={{ margin:'0 0 12px' }}>This isn't a subscription — you only pay for what you actually use. Most personal use costs a few dollars a month at most.</p>
+          <ol style={{ margin:0, paddingLeft:18 }}>
+            <li style={{ marginBottom:8 }}>Go to <span style={{ color:C.gold }}>console.anthropic.com</span></li>
+            <li style={{ marginBottom:8 }}>Create a free account with your email</li>
+            <li style={{ marginBottom:8 }}>Add a payment method (pay-as-you-go, not a flat fee)</li>
+            <li style={{ marginBottom:8 }}>Click "API Keys" in the left menu, then "Create Key"</li>
+            <li style={{ marginBottom:8 }}>Give it any name (e.g. "Dreamwork") and click Create</li>
+            <li style={{ marginBottom:8 }}>Copy the long code it shows you — you won't see it again after leaving the page</li>
+            <li>Paste it into the field above and click "Save key"</li>
+          </ol>
+          <p style={{ margin:'12px 0 0', color:C.muted }}>Treat this key like a password. Dreamwork only ever stores it on this device.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState('chat');
@@ -226,6 +310,7 @@ export default function App() {
   const [mode, setMode] = useState(null);
   const [currentEntryId, setCurrentEntryId] = useState(null);
   const [resumeAvailable, setResumeAvailable] = useState(null); // holds the pending active session, if any
+  const [apiKey, setApiKey] = useState(() => loadApiKey());
   const bottomRef = useRef(null);
   const taRef = useRef(null);
 
@@ -277,9 +362,20 @@ export default function App() {
     setResumeAvailable(null);
   }
 
+  function handleSaveApiKey(key) {
+    saveApiKey(key);
+    setApiKey(key);
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
+
+    if (!apiKey) {
+      setErrorMsg('Add your API key in Settings before starting a session.');
+      return;
+    }
+
     setInput('');
     setErrorMsg('');
     setSessionSaved(false);
@@ -293,9 +389,17 @@ export default function App() {
     const system = SYSTEM_PROMPT + modePrefix + digest;
 
     try {
-      const res = await fetch('/api/chat', {
+      // Calls Claude directly from this device, using the user's own key.
+      // No server sits in between — this is what makes the app work with
+      // zero backend cost, and keeps the key on this device only.
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: 3000,
@@ -306,6 +410,9 @@ export default function App() {
 
       if (!res.ok) {
         const err = await res.text();
+        if (res.status === 401) {
+          throw new Error('Your API key was rejected. Check it in Settings and try again.');
+        }
         throw new Error(`${res.status}: ${err.slice(0, 200)}`);
       }
 
@@ -424,9 +531,9 @@ export default function App() {
             )}
           </div>
           <div style={{ display:'flex', gap:8 }}>
-            {['chat','journal'].map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? 'rgba(201,168,76,0.12)' : 'none', border:`1px solid ${tab===t ? 'rgba(201,168,76,0.35)' : 'rgba(201,168,76,0.15)'}`, color: tab===t ? C.gold : C.muted, fontSize:11, letterSpacing:'0.07em', textTransform:'uppercase', padding:'4px 12px', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
-                {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : 'Dream'}
+            {['chat','journal','settings'].map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? 'rgba(201,168,76,0.12)' : 'none', border:`1px solid ${tab===t ? 'rgba(201,168,76,0.35)' : 'rgba(201,168,76,0.15)'}`, color: tab===t ? C.gold : (t === 'settings' && !apiKey ? '#D0A050' : C.muted), fontSize:11, letterSpacing:'0.07em', textTransform:'uppercase', padding:'4px 12px', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
+                {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : t === 'settings' ? `Settings${!apiKey ? ' •' : ''}` : 'Dream'}
               </button>
             ))}
           </div>
@@ -440,7 +547,16 @@ export default function App() {
             {!hasMessages && (
               <div style={{ textAlign:'center', padding:'40px 16px' }}>
                 <div style={{ fontSize:34, opacity:0.2, marginBottom:18 }}>◯</div>
-                {resumeAvailable ? (
+                {!apiKey ? (
+                  <>
+                    <div style={{ fontSize:22, fontWeight:300, marginBottom:10 }}>Add your key to begin</div>
+                    <div style={{ width:36, height:1, background:'rgba(201,168,76,0.3)', margin:'0 auto 16px' }} />
+                    <div style={{ fontSize:13, fontFamily:'system-ui,sans-serif', color:C.muted, lineHeight:1.7, maxWidth:300, margin:'0 auto 20px' }}>
+                      Dreamwork connects directly from your device to Claude using your own API key — no server, no cost to anyone but you for what you use.
+                    </div>
+                    <button onClick={() => setTab('settings')} style={{ background:'rgba(201,168,76,0.12)', border:'1px solid rgba(201,168,76,0.4)', color:C.gold, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'9px 18px', borderRadius:8, cursor:'pointer' }}>Go to Settings</button>
+                  </>
+                ) : resumeAvailable ? (
                   <>
                     <div style={{ fontSize:22, fontWeight:300, marginBottom:8 }}>Continue where you left off?</div>
                     <div style={{ width:36, height:1, background:'rgba(201,168,76,0.3)', margin:'0 auto 16px' }} />
@@ -565,6 +681,11 @@ export default function App() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Settings tab */}
+      {tab === 'settings' && (
+        <SettingsPanel apiKey={apiKey} onSave={handleSaveApiKey} />
       )}
 
       <style>{`
