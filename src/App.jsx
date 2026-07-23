@@ -7,6 +7,12 @@ const MODE_PREFIX = {
   sync:  `\n\nACTIVE MODE: SYNCHRONICITY\nThe user has selected Synchronicity mode. Lead with the synchronicity reading framework. Do not open with dream reading framing.`,
 };
 
+// ─── FEEDBACK SURVEY ────────────────────────────────────────────────────────
+// Replace the text below with your real Google Form link once you've made one.
+// Until you do, this feature stays silently off — no banner will appear.
+const SURVEY_URL = 'PASTE_YOUR_GOOGLE_FORM_LINK_HERE';
+const SURVEY_TRIGGER_SESSIONS = 30; // number of completed journal entries before the prompt appears
+
 // ─── COLOURS ────────────────────────────────────────────────────────────────
 const C = {
   gold:   '#C9A84C',
@@ -90,6 +96,22 @@ function saveApiKey(key) {
       localStorage.setItem('dreamwork_api_key', key);
     }
   } catch (e) { console.error('API key save failed', e); }
+}
+
+// ─── SURVEY DISMISSAL ─────────────────────────────────────────────────────────
+// Whether this person has already closed the feedback banner, so it doesn't
+// keep reappearing once they've seen it. The survey stays reachable from
+// Settings either way, in case they want to come back to it later.
+function loadSurveyDismissed() {
+  try {
+    return localStorage.getItem('dreamwork_survey_dismissed') === 'true';
+  } catch { return false; }
+}
+
+function saveSurveyDismissed() {
+  try {
+    localStorage.setItem('dreamwork_survey_dismissed', 'true');
+  } catch (e) { console.error('Survey dismissal save failed', e); }
 }
 
 // ─── TEXT RENDERER ───────────────────────────────────────────────────────────
@@ -233,7 +255,7 @@ function EntryDetail({ entry, onBack, onSave }) {
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsPanel({ apiKey, onSave }) {
+function SettingsPanel({ apiKey, onSave, journalCount }) {
   const [keyInput, setKeyInput] = useState(apiKey || '');
   const [saved, setSaved] = useState(false);
   const [showGuide, setShowGuide] = useState(!apiKey);
@@ -293,6 +315,19 @@ function SettingsPanel({ apiKey, onSave }) {
           <p style={{ margin:'12px 0 0', color:C.muted }}>Treat this key like a password. Dreamwork only ever stores it on this device.</p>
         </div>
       )}
+
+      {SURVEY_URL && SURVEY_URL !== 'PASTE_YOUR_GOOGLE_FORM_LINK_HERE' && (
+        <>
+          <div style={{ fontFamily:'system-ui,sans-serif', fontSize:11, color:'rgba(201,168,76,0.5)', letterSpacing:'0.08em', textTransform:'uppercase', margin:'32px 0 12px' }}>Feedback</div>
+          {journalCount >= SURVEY_TRIGGER_SESSIONS ? (
+            <a href={SURVEY_URL} target="_blank" rel="noopener noreferrer" style={{ display:'inline-block', background:'rgba(201,168,76,0.12)', border:'1px solid rgba(201,168,76,0.4)', color:C.gold, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'9px 18px', borderRadius:8, textDecoration:'none' }}>Share feedback</a>
+          ) : (
+            <div style={{ fontSize:13, fontFamily:'system-ui,sans-serif', color:C.muted, lineHeight:1.6 }}>
+              The feedback survey unlocks after {SURVEY_TRIGGER_SESSIONS} sessions — you're at {journalCount} so far.
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -311,6 +346,9 @@ export default function App() {
   const [currentEntryId, setCurrentEntryId] = useState(null);
   const [resumeAvailable, setResumeAvailable] = useState(null); // holds the pending active session, if any
   const [apiKey, setApiKey] = useState(() => loadApiKey());
+  const [surveyDismissed, setSurveyDismissed] = useState(() => loadSurveyDismissed());
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [editText, setEditText] = useState('');
   const bottomRef = useRef(null);
   const taRef = useRef(null);
 
@@ -367,21 +405,11 @@ export default function App() {
     setApiKey(key);
   }
 
-  async function send() {
-    const text = input.trim();
-    if (!text || loading) return;
-
-    if (!apiKey) {
-      setErrorMsg('Add your API key in Settings before starting a session.');
-      return;
-    }
-
-    setInput('');
+  // Sends a given message history to Claude and handles the reply.
+  // Separated from send() so a failed attempt can be retried with the
+  // exact same history, without the person needing to retype anything.
+  async function callClaude(history) {
     setErrorMsg('');
-    setSessionSaved(false);
-
-    const history = [...messages, { role: 'user', content: text }];
-    setMessages(history);
     setLoading(true);
 
     const modePrefix = mode ? MODE_PREFIX[mode] : '';
@@ -428,6 +456,58 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function send() {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    if (!apiKey) {
+      setErrorMsg('Add your API key in Settings before starting a session.');
+      return;
+    }
+
+    setInput('');
+    setSessionSaved(false);
+
+    const history = [...messages, { role: 'user', content: text }];
+    setMessages(history);
+    callClaude(history);
+  }
+
+  // Resends the last message exactly as it was, after a failed attempt —
+  // no retyping or re-pasting needed.
+  function retry() {
+    if (loading) return;
+    if (!messages.length || messages[messages.length - 1].role !== 'user') return;
+    callClaude(messages);
+  }
+
+  // Editing is only offered on the most recent message someone sent, to
+  // keep things simple. Saving an edit drops anything that came after it
+  // (i.e. the old reply, if there was one) and asks Claude to respond
+  // fresh to the corrected version — same as fixing a typo before you'd
+  // sent it in the first place.
+  function startEdit(idx) {
+    if (loading) return;
+    setEditingIdx(idx);
+    setEditText(messages[idx].content);
+  }
+
+  function cancelEdit() {
+    setEditingIdx(null);
+    setEditText('');
+  }
+
+  function saveEdit() {
+    const text = editText.trim();
+    if (!text) return;
+    const corrected = [...messages.slice(0, editingIdx), { role: 'user', content: text }];
+    setMessages(corrected);
+    setEditingIdx(null);
+    setEditText('');
+    setSessionSaved(false);
+    callClaude(corrected);
   }
 
   function handleKey(e) {
@@ -513,7 +593,21 @@ export default function App() {
     if (openEntry?.id === id) setOpenEntry(null);
   }
 
+  function dismissSurvey() {
+    saveSurveyDismissed();
+    setSurveyDismissed(true);
+  }
+
   const hasMessages = messages.length > 0;
+  let lastUserMsgIdx = -1;
+  for (let idx = messages.length - 1; idx >= 0; idx--) {
+    if (messages[idx].role === 'user') { lastUserMsgIdx = idx; break; }
+  }
+  // Only turns on once a real link has been pasted in above, and once
+  // someone has reached the session count — never before either is true.
+  const surveyConfigured = SURVEY_URL && SURVEY_URL !== 'PASTE_YOUR_GOOGLE_FORM_LINK_HERE';
+  const surveyEligible = surveyConfigured && journal.length >= SURVEY_TRIGGER_SESSIONS;
+  const showSurveyBanner = surveyEligible && !surveyDismissed;
 
   return (
     <div style={{ background:C.bg, color:C.text, minHeight:'100dvh', fontFamily:'Georgia,serif', display:'flex', flexDirection:'column', maxWidth:700, margin:'0 auto' }}>
@@ -539,6 +633,17 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Feedback survey banner — shown once, on whichever tab someone is on */}
+      {showSurveyBanner && (
+        <div style={{ margin:'12px 20px 0', padding:'12px 14px', background:'rgba(201,168,76,0.08)', border:'1px solid rgba(201,168,76,0.3)', borderRadius:8, display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+          <div style={{ flex:1, fontSize:12, fontFamily:'system-ui,sans-serif', color:'#C8C0B0', lineHeight:1.5 }}>
+            You've had {journal.length} sessions with Dreamwork — I'd love to hear how it's been.
+          </div>
+          <a href={SURVEY_URL} target="_blank" rel="noopener noreferrer" onClick={dismissSurvey} style={{ background:'rgba(201,168,76,0.15)', border:'1px solid rgba(201,168,76,0.4)', color:C.gold, fontSize:11, fontFamily:'system-ui,sans-serif', padding:'6px 12px', borderRadius:6, textDecoration:'none', whiteSpace:'nowrap', flexShrink:0 }}>Share feedback</a>
+          <button onClick={dismissSurvey} style={{ background:'none', border:'none', color:'rgba(138,138,154,0.5)', fontSize:16, cursor:'pointer', lineHeight:1, padding:0, flexShrink:0 }}>×</button>
+        </div>
+      )}
 
       {/* Chat tab */}
       {tab === 'chat' && (
@@ -609,17 +714,42 @@ export default function App() {
               </div>
             )}
 
-            {messages.map((m, i) => (
-              <div key={i} style={{ marginBottom:24 }}>
-                {m.role === 'user'
-                  ? <div style={{ display:'flex', justifyContent:'flex-end' }}><div style={{ maxWidth:'80%', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px 12px 2px 12px', padding:'11px 15px', fontSize:14, lineHeight:1.6, fontFamily:'system-ui,sans-serif', color:'#C8C0B0', whiteSpace:'pre-wrap' }}>{m.content}</div></div>
-                  : <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
-                      <div style={{ width:24, height:24, borderRadius:'50%', flexShrink:0, marginTop:4, background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:C.gold }}>◈</div>
-                      <div style={{ flex:1, background:C.bgAi, border:'1px solid rgba(201,168,76,0.12)', borderRadius:'2px 12px 12px 12px', padding:'16px 20px' }}>{renderText(m.content)}</div>
-                    </div>
-                }
-              </div>
-            ))}
+            {messages.map((m, i) => {
+              // The most recent user message stays editable even after it's
+              // been answered — not just when a send has failed.
+              const isLastUserMsg = i === lastUserMsgIdx;
+              const isEditing = editingIdx === i;
+              return (
+                <div key={i} style={{ marginBottom:24 }}>
+                  {m.role === 'user'
+                    ? isEditing
+                      ? <div>
+                          <textarea
+                            value={editText}
+                            onChange={e => setEditText(e.target.value)}
+                            autoFocus
+                            rows={3}
+                            style={{ width:'100%', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(201,168,76,0.35)', borderRadius:8, padding:'11px 15px', fontSize:14, lineHeight:1.6, fontFamily:'system-ui,sans-serif', color:C.text, resize:'vertical', outline:'none' }}
+                          />
+                          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+                            <button onClick={cancelEdit} style={{ background:'none', border:'1px solid rgba(201,168,76,0.2)', color:C.muted, fontSize:12, fontFamily:'system-ui,sans-serif', padding:'6px 14px', borderRadius:6, cursor:'pointer' }}>Cancel</button>
+                            <button onClick={saveEdit} disabled={!editText.trim()} style={{ background:'rgba(201,168,76,0.12)', border:'1px solid rgba(201,168,76,0.4)', color:C.gold, fontSize:12, fontFamily:'system-ui,sans-serif', padding:'6px 14px', borderRadius:6, cursor:'pointer', opacity: editText.trim() ? 1 : 0.4 }}>Save & re-interpret</button>
+                          </div>
+                        </div>
+                      : <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end' }}>
+                          <div style={{ maxWidth:'80%', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px 12px 2px 12px', padding:'11px 15px', fontSize:14, lineHeight:1.6, fontFamily:'system-ui,sans-serif', color:'#C8C0B0', whiteSpace:'pre-wrap' }}>{m.content}</div>
+                          {isLastUserMsg && !loading && (
+                            <button onClick={() => startEdit(i)} style={{ background:'none', border:'none', color:'rgba(201,168,76,0.45)', fontSize:11, fontFamily:'system-ui,sans-serif', cursor:'pointer', padding:'4px 2px 0' }}>✎ Edit</button>
+                          )}
+                        </div>
+                    : <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+                        <div style={{ width:24, height:24, borderRadius:'50%', flexShrink:0, marginTop:4, background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:C.gold }}>◈</div>
+                        <div style={{ flex:1, background:C.bgAi, border:'1px solid rgba(201,168,76,0.12)', borderRadius:'2px 12px 12px 12px', padding:'16px 20px' }}>{renderText(m.content)}</div>
+                      </div>
+                  }
+                </div>
+              );
+            })}
 
             {loading && (
               <div style={{ display:'flex', gap:12, alignItems:'flex-start', marginBottom:20 }}>
@@ -644,16 +774,29 @@ export default function App() {
                 <button onClick={newSession} style={{ background:'none', border:'1px solid rgba(201,168,76,0.2)', color:'rgba(201,168,76,0.5)', fontSize:10, letterSpacing:'0.07em', textTransform:'uppercase', padding:'3px 10px', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>New session</button>
               </div>
             )}
-            <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
+            <div style={{ display:'flex', gap:8, alignItems:'flex-end', opacity: editingIdx !== null ? 0.35 : 1, pointerEvents: editingIdx !== null ? 'none' : 'auto' }}>
               <textarea ref={taRef} value={input}
                 onChange={e => { setInput(e.target.value); e.target.style.height='48px'; e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'; }}
                 onKeyDown={handleKey}
+                disabled={editingIdx !== null}
                 placeholder={mode === 'sync' ? 'Describe the coincidence — what happened, when it struck you, what you were feeling…' : 'Describe your dream — what happened, what you saw, what you felt…'}
                 rows={1}
                 style={{ flex:1, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(201,168,76,0.22)', borderRadius:8, padding:'12px 14px', color:C.text, fontFamily:'Georgia,serif', fontSize:15, resize:'none', outline:'none', minHeight:48, maxHeight:140, lineHeight:1.5 }}
               />
-              <button onClick={send} disabled={!input.trim() || loading} style={{ width:44, height:44, borderRadius:8, border:'1px solid rgba(201,168,76,0.3)', background:'rgba(201,168,76,0.1)', color:C.gold, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity:(!input.trim() || loading) ? 0.3 : 1 }}>↑</button>
+              <button onClick={send} disabled={!input.trim() || loading || editingIdx !== null} style={{ width:44, height:44, borderRadius:8, border:'1px solid rgba(201,168,76,0.3)', background:'rgba(201,168,76,0.1)', color:C.gold, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity:(!input.trim() || loading) ? 0.3 : 1 }}>↑</button>
             </div>
+            {editingIdx !== null && <div style={{ marginTop:6, fontSize:11, color:'rgba(201,168,76,0.4)', textAlign:'center', fontFamily:'system-ui,sans-serif' }}>Finish editing above before sending a new message</div>}
+
+            {/* Shown only when the last message never got a reply — lets the
+                person resend exactly what they wrote without retyping it. */}
+            {!loading && errorMsg && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+              <div style={{ display:'flex', justifyContent:'center', marginTop:10 }}>
+                <button onClick={retry} style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.35)', color:C.gold, fontSize:12, fontFamily:'system-ui,sans-serif', padding:'7px 16px', borderRadius:8, cursor:'pointer' }}>
+                  <span style={{ fontSize:14 }}>↻</span> Try sending that again
+                </button>
+              </div>
+            )}
+
             <div style={{ marginTop:7, fontSize:11, color:'rgba(138,138,154,0.3)', textAlign:'center', fontFamily:'system-ui,sans-serif' }}>Enter to send · Shift+Enter for new line</div>
           </div>
         </>
@@ -685,7 +828,7 @@ export default function App() {
 
       {/* Settings tab */}
       {tab === 'settings' && (
-        <SettingsPanel apiKey={apiKey} onSave={handleSaveApiKey} />
+        <SettingsPanel apiKey={apiKey} onSave={handleSaveApiKey} journalCount={journal.length} />
       )}
 
       <style>{`
