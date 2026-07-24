@@ -10,7 +10,7 @@ const MODE_PREFIX = {
 // ─── FEEDBACK SURVEY ────────────────────────────────────────────────────────
 // Replace the text below with your real Google Form link once you've made one.
 // Until you do, this feature stays silently off — no banner will appear.
-const SURVEY_URL = 'PASTE_YOUR_GOOGLE_FORM_LINK_HERE';
+const SURVEY_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfujAdi_LmTHgylMCEGEeipeKzSeG27OfzU6t-bi3Y45BZhag/viewform';
 const SURVEY_TRIGGER_SESSIONS = 30; // number of completed journal entries before the prompt appears
 
 // ─── COLOURS ────────────────────────────────────────────────────────────────
