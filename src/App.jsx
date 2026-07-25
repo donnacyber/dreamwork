@@ -7,11 +7,42 @@ const MODE_PREFIX = {
   sync:  `\n\nACTIVE MODE: SYNCHRONICITY\nThe user has selected Synchronicity mode. Lead with the synchronicity reading framework. Do not open with dream reading framing.`,
 };
 
+// ─── EXPERIENCE LEVEL PREFIXES ──────────────────────────────────────────────
+// A short calibration note based on how familiar this person said they are
+// with Jungian psychology / dream work. Adjusts register, not substance —
+// the same framework underneath either way.
+const EXPERIENCE_PREFIX = {
+  beginner: `\n\nDREAMER'S EXPERIENCE LEVEL: NEW TO THIS\nThis person is new to Jungian psychology and dream work. Use plain language throughout. The moment a term like "archetype," "shadow," "individuation," or similar appears, ground it in one plain sentence before continuing. Never assume prior familiarity.`,
+  some: `\n\nDREAMER'S EXPERIENCE LEVEL: SOME FAMILIARITY\nThis person has some familiarity with this material. Use the framework's vocabulary naturally, but briefly ground any less common term the first time it appears in a session.`,
+  experienced: `\n\nDREAMER'S EXPERIENCE LEVEL: VERY FAMILIAR\nThis person is very familiar with Jungian psychology and dream work. Use the full vocabulary of the framework freely, without pausing to define standard terms.`,
+};
+
 // ─── FEEDBACK SURVEY ────────────────────────────────────────────────────────
 // Replace the text below with your real Google Form link once you've made one.
 // Until you do, this feature stays silently off — no banner will appear.
 const SURVEY_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfujAdi_LmTHgylMCEGEeipeKzSeG27OfzU6t-bi3Y45BZhag/viewform';
 const SURVEY_TRIGGER_SESSIONS = 30; // number of completed journal entries before the prompt appears
+
+// ─── OPENING SCREEN REMINDER ────────────────────────────────────────────────
+// A short, standing reminder shown under the "dream / coincidence" choice,
+// every time — not a one-time popup. Edit the text below any time; it
+// updates for everyone the next time you deploy.
+const REMINDER_TEXT = `A gentle reminder: it takes patience to sit with an image long enough for it to speak. However odd, fragmentary, or insignificant it feels — even just a snippet, or only a trace of feeling with no image at all — it's still worth bringing here. You may be surprised what the symbols reveal. Take your time, stay open, and be easy on yourself.`;
+
+// ─── DISCLAIMER ──────────────────────────────────────────────────────────────
+// Shown once, in full, before anyone's first session — they have to
+// acknowledge it to continue. Always stays readable afterward, in Settings.
+//
+// To edit later: change the text below. If you make a meaningful change
+// (not just fixing a typo), bump DISCLAIMER_VERSION (e.g. 'v1' to 'v2') so
+// everyone has to see and acknowledge the new version, even people who
+// already accepted an earlier one.
+const DISCLAIMER_VERSION = 'v1';
+const DISCLAIMER_TEXT = `Dreamwork is a personal reflection tool inspired by Jungian psychology. It works with the symbols, images, and patterns that dreams and meaningful coincidences bring up — it does not diagnose, treat, or provide medical or mental health advice, and it is not a substitute for care from a qualified professional.
+
+Sitting with a dream can occasionally bring up something intense or unexpected. If that happens, and it feels like more than you can hold alone, please reach out to a real person — a friend, a therapist, a doctor, or a crisis service. In the UK, Samaritans are reachable anytime on 116 123. In the US and Canada, you can call or text 988. Wherever you are, your local emergency number is always a valid place to start.
+
+This app is meant for general adult reflection. Whatever it reflects back to you is an invitation to think and feel further — not a verdict, and not the final word on what something means. You remain the person who knows your own life best.`;
 
 // ─── COLOURS ────────────────────────────────────────────────────────────────
 const C = {
@@ -112,6 +143,38 @@ function saveSurveyDismissed() {
   try {
     localStorage.setItem('dreamwork_survey_dismissed', 'true');
   } catch (e) { console.error('Survey dismissal save failed', e); }
+}
+
+// ─── DISCLAIMER ACKNOWLEDGMENT ─────────────────────────────────────────────────
+// Which version of the disclaimer this device has already acknowledged.
+// Compared against DISCLAIMER_VERSION so a meaningful rewrite can require
+// everyone to see and accept it again.
+function loadAcknowledgedDisclaimerVersion() {
+  try {
+    return localStorage.getItem('dreamwork_disclaimer_ack') || '';
+  } catch { return ''; }
+}
+
+function saveAcknowledgedDisclaimerVersion(version) {
+  try {
+    localStorage.setItem('dreamwork_disclaimer_ack', version);
+  } catch (e) { console.error('Disclaimer acknowledgment save failed', e); }
+}
+
+// ─── EXPERIENCE LEVEL ─────────────────────────────────────────────────────────
+// How familiar this person said they are with Jungian psychology / dream
+// work — 'beginner', 'some', or 'experienced'. Empty string means they
+// haven't been asked (or chose to skip) yet.
+function loadExperienceLevel() {
+  try {
+    return localStorage.getItem('dreamwork_experience_level') || '';
+  } catch { return ''; }
+}
+
+function saveExperienceLevel(level) {
+  try {
+    localStorage.setItem('dreamwork_experience_level', level);
+  } catch (e) { console.error('Experience level save failed', e); }
 }
 
 // ─── TEXT RENDERER ───────────────────────────────────────────────────────────
@@ -255,7 +318,7 @@ function EntryDetail({ entry, onBack, onSave }) {
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsPanel({ apiKey, onSave, journalCount }) {
+function SettingsPanel({ apiKey, onSave, journalCount, experienceLevel, onChooseExperienceLevel }) {
   const [keyInput, setKeyInput] = useState(apiKey || '');
   const [saved, setSaved] = useState(false);
   const [showGuide, setShowGuide] = useState(!apiKey);
@@ -328,6 +391,23 @@ function SettingsPanel({ apiKey, onSave, journalCount }) {
           )}
         </>
       )}
+
+      <div style={{ fontFamily:'system-ui,sans-serif', fontSize:11, color:'rgba(201,168,76,0.5)', letterSpacing:'0.08em', textTransform:'uppercase', margin:'32px 0 12px' }}>Experience level</div>
+      <div style={{ fontSize:13, fontFamily:'system-ui,sans-serif', color:C.muted, lineHeight:1.6, marginBottom:14 }}>
+        How familiar you are with Jungian psychology or dream work — this changes how much Dreamwork explains as it goes.
+      </div>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        {[
+          { key:'beginner', label:'New to this' },
+          { key:'some', label:'Some familiarity' },
+          { key:'experienced', label:'Very familiar' },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => onChooseExperienceLevel(key)} style={{ background: experienceLevel===key ? 'rgba(201,168,76,0.15)' : 'none', border:`1px solid ${experienceLevel===key ? 'rgba(201,168,76,0.5)' : 'rgba(201,168,76,0.25)'}`, color: experienceLevel===key ? C.gold : C.muted, fontSize:12, fontFamily:'system-ui,sans-serif', padding:'8px 14px', borderRadius:8, cursor:'pointer' }}>{label}</button>
+        ))}
+      </div>
+
+      <div style={{ fontFamily:'system-ui,sans-serif', fontSize:11, color:'rgba(201,168,76,0.5)', letterSpacing:'0.08em', textTransform:'uppercase', margin:'32px 0 12px' }}>Disclaimer</div>
+      <div style={{ fontSize:13, fontFamily:'system-ui,sans-serif', color:'#C8C0B0', lineHeight:1.75, whiteSpace:'pre-wrap' }}>{DISCLAIMER_TEXT}</div>
     </div>
   );
 }
@@ -347,6 +427,8 @@ export default function App() {
   const [resumeAvailable, setResumeAvailable] = useState(null); // holds the pending active session, if any
   const [apiKey, setApiKey] = useState(() => loadApiKey());
   const [surveyDismissed, setSurveyDismissed] = useState(() => loadSurveyDismissed());
+  const [disclaimerAckVersion, setDisclaimerAckVersion] = useState(() => loadAcknowledgedDisclaimerVersion());
+  const [experienceLevel, setExperienceLevel] = useState(() => loadExperienceLevel());
   const [editingIdx, setEditingIdx] = useState(null);
   const [editText, setEditText] = useState('');
   const bottomRef = useRef(null);
@@ -413,8 +495,9 @@ export default function App() {
     setLoading(true);
 
     const modePrefix = mode ? MODE_PREFIX[mode] : '';
+    const experiencePrefix = experienceLevel ? EXPERIENCE_PREFIX[experienceLevel] : '';
     const digest = buildJournalDigest(journal);
-    const system = SYSTEM_PROMPT + modePrefix + digest;
+    const system = SYSTEM_PROMPT + modePrefix + experiencePrefix + digest;
 
     try {
       // Calls Claude directly from this device, using the user's own key.
@@ -598,6 +681,21 @@ export default function App() {
     setSurveyDismissed(true);
   }
 
+  function acknowledgeDisclaimer() {
+    saveAcknowledgedDisclaimerVersion(DISCLAIMER_VERSION);
+    setDisclaimerAckVersion(DISCLAIMER_VERSION);
+  }
+
+  function chooseExperienceLevel(level) {
+    saveExperienceLevel(level);
+    setExperienceLevel(level);
+  }
+
+  const mustShowDisclaimer = disclaimerAckVersion !== DISCLAIMER_VERSION;
+  // Only asked once the disclaimer is out of the way, and only if nobody's
+  // answered (or skipped) it yet on this device.
+  const mustAskExperience = !mustShowDisclaimer && !experienceLevel;
+
   const hasMessages = messages.length > 0;
   let lastUserMsgIdx = -1;
   for (let idx = messages.length - 1; idx >= 0; idx--) {
@@ -612,8 +710,39 @@ export default function App() {
   return (
     <div style={{ background:C.bg, color:C.text, minHeight:'100dvh', fontFamily:'Georgia,serif', display:'flex', flexDirection:'column', maxWidth:700, margin:'0 auto' }}>
 
+      {/* Disclaimer gate — has to be acknowledged before anything else is usable */}
+      {mustShowDisclaimer && (
+        <div style={{ position:'fixed', inset:0, background:C.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:24, zIndex:100 }}>
+          <div style={{ maxWidth:480, width:'100%', maxHeight:'85vh', overflowY:'auto', border:`1px solid rgba(201,168,76,0.3)`, borderRadius:12, padding:'28px 26px' }}>
+            <div style={{ fontSize:11, fontFamily:'system-ui,sans-serif', color:'rgba(201,168,76,0.6)', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:16 }}>Before you begin</div>
+            <div style={{ fontSize:14, fontFamily:'system-ui,sans-serif', color:'#C8C0B0', lineHeight:1.8, whiteSpace:'pre-wrap', marginBottom:24 }}>{DISCLAIMER_TEXT}</div>
+            <button onClick={acknowledgeDisclaimer} style={{ background:'rgba(201,168,76,0.12)', border:'1px solid rgba(201,168,76,0.4)', color:C.gold, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'10px 22px', borderRadius:8, cursor:'pointer' }}>I understand</button>
+          </div>
+        </div>
+      )}
+
+      {/* Experience level — asked once, right after the disclaimer, skippable */}
+      {mustAskExperience && (
+        <div style={{ position:'fixed', inset:0, background:C.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:24, zIndex:100 }}>
+          <div style={{ maxWidth:420, width:'100%', textAlign:'center' }}>
+            <div style={{ fontSize:20, fontWeight:300, marginBottom:10 }}>How familiar are you with Jungian psychology or dream work?</div>
+            <div style={{ fontSize:13, fontFamily:'system-ui,sans-serif', color:C.muted, lineHeight:1.6, marginBottom:24 }}>This just helps Dreamwork meet you where you are — you can change it anytime in Settings.</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:18 }}>
+              {[
+                { key:'beginner', label:'New to this' },
+                { key:'some', label:'Some familiarity' },
+                { key:'experienced', label:'Very familiar' },
+              ].map(({ key, label }) => (
+                <button key={key} onClick={() => chooseExperienceLevel(key)} style={{ background:'rgba(201,168,76,0.08)', border:'1px solid rgba(201,168,76,0.3)', color:C.gold, fontSize:14, fontFamily:'system-ui,sans-serif', padding:'12px 16px', borderRadius:8, cursor:'pointer' }}>{label}</button>
+              ))}
+            </div>
+            <button onClick={() => chooseExperienceLevel('some')} style={{ background:'none', border:'none', color:'rgba(138,138,154,0.5)', fontSize:12, fontFamily:'system-ui,sans-serif', cursor:'pointer' }}>Skip for now</button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div style={{ padding:'18px 20px 0', flexShrink:0 }}>
+      <div style={{ padding:'20px 20px 0', paddingTop:'calc(env(safe-area-inset-top, 0px) + 30px)', flexShrink:0 }}>
         <div style={{ height:1, background:`linear-gradient(90deg,transparent,${C.gold},transparent)`, marginBottom:12 }} />
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:12, borderBottom:`1px solid ${C.border}` }}>
           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
@@ -626,7 +755,7 @@ export default function App() {
           </div>
           <div style={{ display:'flex', gap:8 }}>
             {['chat','journal','settings'].map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? 'rgba(201,168,76,0.12)' : 'none', border:`1px solid ${tab===t ? 'rgba(201,168,76,0.35)' : 'rgba(201,168,76,0.15)'}`, color: tab===t ? C.gold : (t === 'settings' && !apiKey ? '#D0A050' : C.muted), fontSize:11, letterSpacing:'0.07em', textTransform:'uppercase', padding:'4px 12px', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
+              <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? 'rgba(201,168,76,0.12)' : 'none', border:`1px solid ${tab===t ? 'rgba(201,168,76,0.35)' : 'rgba(201,168,76,0.15)'}`, color: tab===t ? C.gold : (t === 'settings' && !apiKey ? '#D0A050' : C.muted), fontSize:11, letterSpacing:'0.07em', textTransform:'uppercase', padding:'9px 14px', minHeight:38, borderRadius:6, cursor:'pointer', fontFamily:'inherit' }}>
                 {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : t === 'settings' ? `Settings${!apiKey ? ' •' : ''}` : 'Dream'}
               </button>
             ))}
@@ -696,6 +825,7 @@ export default function App() {
                         </button>
                       ))}
                     </div>
+                    <div style={{ fontSize:12, fontFamily:'system-ui,sans-serif', color:'rgba(200,192,176,0.55)', lineHeight:1.7, fontStyle:'italic', maxWidth:360, margin:'0 auto 18px' }}>{REMINDER_TEXT}</div>
                     {journal.length > 0 && <div style={{ fontSize:11, fontFamily:'system-ui,sans-serif', color:'rgba(201,168,76,0.35)', letterSpacing:'0.05em' }}>{journal.length} session{journal.length > 1 ? 's' : ''} in your journal</div>}
                   </>
                 ) : (
@@ -828,7 +958,7 @@ export default function App() {
 
       {/* Settings tab */}
       {tab === 'settings' && (
-        <SettingsPanel apiKey={apiKey} onSave={handleSaveApiKey} journalCount={journal.length} />
+        <SettingsPanel apiKey={apiKey} onSave={handleSaveApiKey} journalCount={journal.length} experienceLevel={experienceLevel} onChooseExperienceLevel={chooseExperienceLevel} />
       )}
 
       <style>{`
