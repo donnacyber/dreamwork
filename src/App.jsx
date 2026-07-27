@@ -736,18 +736,45 @@ export default function App() {
   // file anywhere they like (a cloud sync folder, an external drive, a USB
   // stick) and bring it back in later, here or on another device. Nothing
   // about this talks to any third-party service directly; it's just a file.
-  function exportJournal() {
+  async function exportJournal() {
     const payload = {
       app: 'dreamwork',
       exportedAt: new Date().toISOString(),
       version: 1,
       entries: journal,
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const json = JSON.stringify(payload, null, 2);
+    const filename = `dreamwork-journal-${new Date().toISOString().slice(0, 10)}.json`;
+
+    // On mobile — and especially inside an installed/PWA context — a plain
+    // blob download link is unreliable: some browsers silently fail to
+    // download it and instead navigate to it as if it were a normal page,
+    // which can land in a separate browsing context with its own storage
+    // (hence the disclaimer reappearing, as if it were a brand new visit).
+    // The native share sheet is the reliable way to hand a file off on
+    // mobile, and it's exactly what lets someone save straight into Files,
+    // iCloud Drive, Sync, Dropbox, or anywhere else they choose.
+    try {
+      const file = new File([json], filename, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Dreamwork journal export' });
+        return;
+      }
+    } catch (e) {
+      // Cancelling the share sheet throws an AbortError — that's just the
+      // person changing their mind, not a real failure, so don't fall
+      // through to a second, duplicate download attempt in that case.
+      if (e && e.name === 'AbortError') return;
+      console.error('Share export failed, falling back to direct download', e);
+    }
+
+    // Fallback for browsers without file-sharing support (most desktop
+    // browsers): a normal download link.
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `dreamwork-journal-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
