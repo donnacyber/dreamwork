@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { SYSTEM_PROMPT } from './systemPrompt.js';
+import { idbGetAllEntries, idbPutEntry, idbDeleteEntry, idbUpsertMany, migrateLegacyJournalIfNeeded } from './journalStore.js';
 
 // ─── MODE PREFIXES ──────────────────────────────────────────────────────────
 const MODE_PREFIX = {
@@ -55,18 +56,11 @@ const C = {
 };
 
 // ─── JOURNAL STORAGE ────────────────────────────────────────────────────────
-function loadJournal() {
-  try {
-    const raw = localStorage.getItem('dreamwork_journal');
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-function saveJournal(entries) {
-  try {
-    localStorage.setItem('dreamwork_journal', JSON.stringify(entries));
-  } catch (e) { console.error('Save failed', e); }
-}
+// The journal itself now lives in IndexedDB (see journalStore.js) instead of
+// localStorage — see the functions imported above. Everything else on this
+// device (API key, drafts, the in-progress session, settings) is small and
+// fixed in size, so it stays in localStorage exactly as before; only the
+// journal, which grows without bound, needed the larger, more efficient store.
 
 // ─── ACTIVE SESSION TRACKING ─────────────────────────────────────────────────
 // Tracks the session currently in progress, separate from the permanent journal,
@@ -318,10 +312,11 @@ function EntryDetail({ entry, onBack, onSave }) {
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsPanel({ apiKey, onSave, journalCount, experienceLevel, onChooseExperienceLevel }) {
+function SettingsPanel({ apiKey, onSave, journalCount, experienceLevel, onChooseExperienceLevel, onExport, onImport }) {
   const [keyInput, setKeyInput] = useState(apiKey || '');
   const [saved, setSaved] = useState(false);
   const [showGuide, setShowGuide] = useState(!apiKey);
+  const [importStatus, setImportStatus] = useState(null);
 
   function handleSave() {
     onSave(keyInput.trim());
@@ -334,6 +329,19 @@ function SettingsPanel({ apiKey, onSave, journalCount, experienceLevel, onChoose
     onSave('');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so importing the same filename again still fires onChange
+    if (!file) return;
+    setImportStatus({ type: 'pending', text: 'Importing…' });
+    const result = await onImport(file);
+    setImportStatus(
+      result.ok
+        ? { type: 'ok', text: `Imported ${result.count} ${result.count === 1 ? 'entry' : 'entries'}.` }
+        : { type: 'error', text: result.error }
+    );
   }
 
   return (
@@ -406,6 +414,29 @@ function SettingsPanel({ apiKey, onSave, journalCount, experienceLevel, onChoose
         ))}
       </div>
 
+      <div style={{ fontFamily:'system-ui,sans-serif', fontSize:11, color:'rgba(201,168,76,0.5)', letterSpacing:'0.08em', textTransform:'uppercase', margin:'32px 0 12px' }}>Backup</div>
+      <div style={{ fontSize:13, fontFamily:'system-ui,sans-serif', color:C.muted, lineHeight:1.7, marginBottom:14 }}>
+        Your journal lives only on this device. Export it to a file any time — save that file to Sync, Dropbox, iCloud Drive, an external drive, wherever you like — and import it back in later, here or on another device.
+      </div>
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+        <button
+          onClick={onExport}
+          disabled={journalCount === 0}
+          style={{ background:'rgba(201,168,76,0.12)', border:'1px solid rgba(201,168,76,0.4)', color:C.gold, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'9px 18px', borderRadius:8, cursor: journalCount === 0 ? 'default' : 'pointer', opacity: journalCount === 0 ? 0.4 : 1 }}
+        >
+          Export journal{journalCount ? ` (${journalCount})` : ''}
+        </button>
+        <label style={{ background:'none', border:'1px solid rgba(201,168,76,0.2)', color:C.muted, fontSize:13, fontFamily:'system-ui,sans-serif', padding:'9px 18px', borderRadius:8, cursor:'pointer', display:'inline-block' }}>
+          Import journal
+          <input type="file" accept="application/json" onChange={handleFileChange} style={{ display:'none' }} />
+        </label>
+      </div>
+      {importStatus && (
+        <div style={{ marginTop:10, fontSize:12, fontFamily:'system-ui,sans-serif', color: importStatus.type === 'error' ? '#D08080' : 'rgba(201,168,76,0.7)' }}>
+          {importStatus.type === 'error' ? '⚠ ' : importStatus.type === 'ok' ? '✓ ' : ''}{importStatus.text}
+        </div>
+      )}
+
       <div style={{ fontFamily:'system-ui,sans-serif', fontSize:11, color:'rgba(201,168,76,0.5)', letterSpacing:'0.08em', textTransform:'uppercase', margin:'32px 0 12px' }}>Disclaimer</div>
       <div style={{ fontSize:13, fontFamily:'system-ui,sans-serif', color:'#C8C0B0', lineHeight:1.75, whiteSpace:'pre-wrap' }}>{DISCLAIMER_TEXT}</div>
     </div>
@@ -419,7 +450,8 @@ export default function App() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [journal, setJournal] = useState(() => loadJournal());
+  const [journal, setJournal] = useState([]);
+  const [journalLoaded, setJournalLoaded] = useState(false);
   const [openEntry, setOpenEntry] = useState(null);
   const [sessionSaved, setSessionSaved] = useState(false);
   const [mode, setMode] = useState(null);
@@ -437,6 +469,24 @@ export default function App() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  // Load the journal from IndexedDB on startup, migrating anything still
+  // sitting in the old localStorage store first (a one-time, automatic step
+  // — see journalStore.js for details).
+  useEffect(() => {
+    (async () => {
+      try {
+        await migrateLegacyJournalIfNeeded();
+        const entries = await idbGetAllEntries();
+        entries.sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
+        setJournal(entries);
+      } catch (e) {
+        console.error('Journal load failed', e);
+      } finally {
+        setJournalLoaded(true);
+      }
+    })();
+  }, []);
 
   // On load, check for an unfinished session to offer resuming
   useEffect(() => {
@@ -616,16 +666,18 @@ export default function App() {
 
     setJournal(prevJournal => {
       let updated;
+      let changedEntry;
       if (currentEntryId && prevJournal.some(e => e.id === currentEntryId)) {
         // Update existing entry in place
-        updated = prevJournal.map(e => e.id === currentEntryId
-          ? { ...e, messages: msgs, stage, closingWord }
-          : e
-        );
+        updated = prevJournal.map(e => {
+          if (e.id !== currentEntryId) return e;
+          changedEntry = { ...e, messages: msgs, stage, closingWord };
+          return changedEntry;
+        });
       } else {
         // Create new entry
         const newId = Date.now().toString();
-        const entry = {
+        changedEntry = {
           id: newId,
           savedAt: Date.now(),
           title: dreamText.split(' ').slice(0, 6).join(' ') + '…',
@@ -635,10 +687,13 @@ export default function App() {
           closingWord,
           mode,
         };
-        updated = [...prevJournal, entry];
+        updated = [...prevJournal, changedEntry];
         setCurrentEntryId(newId);
       }
-      saveJournal(updated);
+      // Only the entry that actually changed gets written — the point of
+      // IndexedDB over the old localStorage blob is exactly this: a single
+      // dream's worth of data touched per save, not the whole journal.
+      idbPutEntry(changedEntry);
       // Track this as the in-progress session, so it can be resumed if the app is closed
       const entryIdForActive = currentEntryId && prevJournal.some(e => e.id === currentEntryId)
         ? currentEntryId
@@ -666,14 +721,69 @@ export default function App() {
     const newJournal = journal.map(e => e.id === updated.id ? updated : e);
     setJournal(newJournal);
     setOpenEntry(updated);
-    saveJournal(newJournal);
+    idbPutEntry(updated);
   }
 
   function deleteEntry(id) {
     const newJournal = journal.filter(e => e.id !== id);
     setJournal(newJournal);
-    saveJournal(newJournal);
+    idbDeleteEntry(id);
     if (openEntry?.id === id) setOpenEntry(null);
+  }
+
+  // ─── EXPORT / IMPORT ────────────────────────────────────────────────────
+  // Lets someone get their journal off this one device — save the exported
+  // file anywhere they like (a cloud sync folder, an external drive, a USB
+  // stick) and bring it back in later, here or on another device. Nothing
+  // about this talks to any third-party service directly; it's just a file.
+  function exportJournal() {
+    const payload = {
+      app: 'dreamwork',
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      entries: journal,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dreamwork-journal-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Imports a previously exported file, merging by entry id so importing
+  // the same file twice (or restoring onto a device that already has some
+  // of these entries) is harmless rather than creating duplicates. Returns
+  // a result object the Settings panel uses to show a success or error message.
+  async function importJournalFile(file) {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const incoming = Array.isArray(parsed) ? parsed
+        : Array.isArray(parsed?.entries) ? parsed.entries
+        : null;
+
+      if (!incoming) {
+        throw new Error("That file doesn't look like a Dreamwork journal export.");
+      }
+      const looksValid = incoming.every(e => e && typeof e === 'object' && e.id && e.savedAt);
+      if (!looksValid) {
+        throw new Error("That file doesn't look like a Dreamwork journal export.");
+      }
+
+      const byId = new Map(journal.map(e => [e.id, e]));
+      incoming.forEach(e => byId.set(e.id, e));
+      const merged = [...byId.values()].sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
+
+      await idbUpsertMany(incoming);
+      setJournal(merged);
+      return { ok: true, count: incoming.length };
+    } catch (e) {
+      return { ok: false, error: String(e.message || e) };
+    }
   }
 
   function dismissSurvey() {
@@ -939,7 +1049,7 @@ export default function App() {
             <EntryDetail entry={openEntry} onBack={() => setOpenEntry(null)} onSave={updateEntry} />
           ) : (
             <div style={{ flex:1, overflowY:'auto', padding:'20px' }}>
-              {journal.length === 0 ? (
+              {!journalLoaded ? null : journal.length === 0 ? (
                 <div style={{ textAlign:'center', padding:'48px 16px' }}>
                   <div style={{ fontSize:30, opacity:0.2, marginBottom:16 }}>◯</div>
                   <div style={{ fontSize:16, fontWeight:300, marginBottom:10 }}>No entries yet.</div>
@@ -958,7 +1068,7 @@ export default function App() {
 
       {/* Settings tab */}
       {tab === 'settings' && (
-        <SettingsPanel apiKey={apiKey} onSave={handleSaveApiKey} journalCount={journal.length} experienceLevel={experienceLevel} onChooseExperienceLevel={chooseExperienceLevel} />
+        <SettingsPanel apiKey={apiKey} onSave={handleSaveApiKey} journalCount={journal.length} experienceLevel={experienceLevel} onChooseExperienceLevel={chooseExperienceLevel} onExport={exportJournal} onImport={importJournalFile} />
       )}
 
       <style>{`
