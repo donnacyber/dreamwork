@@ -564,6 +564,14 @@ export default function App() {
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: 3000,
+          // Automatic prompt caching: the system prompt here is large (tens
+          // of thousands of tokens), and without this, every single message
+          // in a session would re-process the whole thing at full price.
+          // With this on, the system prompt (and the growing conversation
+          // history) gets cached after the first call in a session, and
+          // subsequent calls read most of that from cache at a fraction of
+          // the cost — no change in behavior or output, just cost and speed.
+          cache_control: { type: 'ephemeral' },
           system,
           messages: history.map(m => ({ role: m.role, content: m.content })),
         }),
