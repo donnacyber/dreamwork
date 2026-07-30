@@ -469,21 +469,19 @@ At its core, Dreamwork is a journal. It tracks your dreams and your coincidences
 
 That's why this exists. Typing your dream into a generic language model isn't going to give you a true reading through this lens — it's going to hand you something distorted. I've taken on the responsibility of building a structured framework instead, so I'm not relying on some AI to pat me on the back and tell me I'm doing a good job. That feels wrong. It feels dangerous. Understanding who I am, what my difficulties are, and why they are what they are — that's my responsibility. Not something to hand off.`;
 
-const ABOUT_QUESTION_BANK = `Dreamwork doesn't ask Claude to freestyle a fresh set of questions every session. Every question it can choose from is pre-written, sitting in what the app calls the question bank — organised into stages that roughly follow how a real dream-work conversation tends to unfold. The interpreter picks the single most alive question for the moment from the right stage; it's never allowed to invent one from scratch when a question bank entry already fits, and it's never allowed to ask more than one question at a time.
+const ABOUT_QUESTION_BANK_INTRO = `Dreamwork never makes questions up on the spot. Every question it can ask you is written in advance, sitting in what the app calls the question bank. There are seven stages, roughly following how a real conversation about a dream tends to unfold — and only ever one question at a time.`;
 
-Orienting comes first, before any symbol or figure work: what feeling stayed with you on waking, where the dream sits in your body, which single image is the one that won't let go. This happens before any interpretation, so the dream is met as itself first.
+const ABOUT_QUESTION_BANK_OUTRO = `Why bother pre-writing them, rather than letting Claude improvise? So it can't invent a meaning that isn't there, can't rush you, and never buries you in more than one question at once.`;
 
-Symbol and Figure questions come next. The interpreter moves between whichever is more alive — amplifying one image or one figure at a time (water, fire, an animal, a house, a shadow figure, an anima or animus figure, a wise old figure) rather than trying to cover everything in the dream at once.
-
-Alchemical Stage questions ask which of the four classical stages the dream seems to be sitting in — Nigredo (darkness, dissolution), Albedo (first clarity), Citrinitas (something new becoming possible), or Rubedo (integration) — and ask one question suited to that stage.
-
-Typological questions are used sparingly, only when your psychological type is known or the dream strongly suggests it — asking what your least-developed function (thinking, feeling, sensation, or intuition) might be trying to bring you.
-
-Longitudinal questions only appear once you have a journal history. They draw threads between this dream and patterns across past sessions — a symbol that keeps returning, a stage you keep circling back to, a feeling that won't resolve. These are never forced; if there's no genuine pattern, none is asked.
-
-Every session ends with exactly one Closing question, chosen to help you carry something forward without over-interpreting it — never invented on the spot.
-
-Why do it this way, rather than letting Claude improvise? Consistency and restraint. A pre-written bank means the interpreter can't spiral into inventing meaning, can't rush toward a fixed interpretation, and always leaves you with a single, considered question — never a barrage of them.`;
+const ABOUT_QUESTION_BANK_STAGES = [
+  { name: '1. Orientation', def: "The first questions, asked before any interpreting begins. How did the dream feel? Where do you feel it in your body? Which single image won't let go?" },
+  { name: '2. Symbol', def: 'A close look at one image at a time — water, fire, an animal, a house — rather than trying to cover the whole dream at once.' },
+  { name: '3. Figure', def: 'A close look at one person or presence in the dream at a time — a frightening figure, a wise one, a child.' },
+  { name: '4. Alchemical stage', def: 'Naming which mood the dream seems to sit in: darkness, first clarity, new possibility, or coming-together (see the glossary below for what these mean).' },
+  { name: '5. Type', def: "Used only sometimes, when it's fairly clear how your mind naturally works — asking what your dream might be trying to balance out." },
+  { name: '6. Looking back', def: 'Only appears once you have some journal history. Connects this dream to a pattern in earlier ones.' },
+  { name: '7. Closing', def: 'Always one last question, to help something from the session stay with you without over-analysing it.' },
+];
 
 const ABOUT_GLOSSARY = [
   { term: 'Archetype', def: "A universal pattern or figure that shows up across cultures and individuals — not learned, but built into how the human mind seems to work. The shadow, the wise old figure, and the great mother are all archetypes." },
@@ -497,7 +495,8 @@ const ABOUT_GLOSSARY = [
   { term: 'Inflation', def: 'When a person becomes identified with something bigger than themselves — a sense of special destiny, cosmic importance, or grandiosity — rather than staying in a respectful, conscious relationship to it.' },
   { term: 'Numinous', def: "Rudolf Otto's word (borrowed by Jung) for the felt quality of something sacred, awe-inspiring, or larger than ordinary life. Big dreams tend to carry this quality; ordinary dreams usually don't." },
   { term: 'Synchronicity', def: "A meaningful coincidence between something happening inside you (a thought, feeling, dream) and something happening in the outer world, where the two can't be explained as cause and effect but still feel connected." },
-  { term: 'The four alchemical stages', def: 'Nigredo (blackening) — necessary darkness and dissolution. Albedo (whitening) — the first clarity after it. Citrinitas (yellowing) — something new becoming possible. Rubedo (reddening) — integration, when opposites come together into something more whole.' },
+  { term: 'The four alchemical stages', def: "An old alchemical map for how a big change tends to unfold: Nigredo, a necessary darkness. Albedo, the first clarity after it. Citrinitas, something new becoming possible. Rubedo, everything coming together into something more whole." },
+  { term: 'The seven alchemical operations (Edinger)', def: "Smaller, recurring moves that can show up at any point, not just once. Calcinatio — burning away what's no longer needed. Solutio — dissolving something too rigid. Coagulatio — making something real and lived-in rather than just an idea. Sublimatio — rising to see things more clearly. Mortificatio — a hard ending that clears space. Separatio — telling two tangled things apart. Coniunctio — two opposites coming together as one." },
 ];
 
 const ABOUT_BOOKS = [
@@ -559,12 +558,6 @@ function AboutPanel() {
         ))}
       </AboutSection>
 
-      <AboutSection title="How the question bank works" open={openKey === 'bank'} onToggle={() => toggle('bank')}>
-        {ABOUT_QUESTION_BANK.split('\n\n').map((p, i) => (
-          <p key={i} style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.8, margin: '0 0 14px' }}>{p}</p>
-        ))}
-      </AboutSection>
-
       <AboutSection title="Jungian terms, plainly explained" open={openKey === 'glossary'} onToggle={() => toggle('glossary')}>
         {ABOUT_GLOSSARY.map((g, i) => (
           <div key={i} style={{ marginBottom: 16 }}>
@@ -586,6 +579,17 @@ function AboutPanel() {
             ))}
           </div>
         ))}
+      </AboutSection>
+
+      <AboutSection title="How the question bank works" open={openKey === 'bank'} onToggle={() => toggle('bank')}>
+        <p style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.8, margin: '0 0 16px' }}>{ABOUT_QUESTION_BANK_INTRO}</p>
+        {ABOUT_QUESTION_BANK_STAGES.map((s, i) => (
+          <div key={i} style={{ marginBottom: 14 }}>
+            <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 13, color: C.gold, marginBottom: 4 }}>{s.name}</div>
+            <div style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.7 }}>{s.def}</div>
+          </div>
+        ))}
+        <p style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.8, margin: '16px 0 0' }}>{ABOUT_QUESTION_BANK_OUTRO}</p>
       </AboutSection>
     </div>
   );
