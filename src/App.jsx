@@ -445,6 +445,152 @@ function SettingsPanel({ apiKey, onSave, journalCount, experienceLevel, onChoose
   );
 }
 
+// ─── ABOUT TAB CONTENT ──────────────────────────────────────────────────────
+// Edit any of the text below any time — it's plain strings, no logic involved.
+// Paragraphs are separated by a blank line (\n\n) and rendered automatically.
+
+const ABOUT_WHY_BUILT = `Over the past year I've worked intensively with language models — Grok, ChatGPT, Claude — specifically through the lens of Jungian psychology and the interpretation of alchemical symbols. What I kept running into was a tone. These models sound like a buddy. They pat you on the back. And I think that's dangerous — not just unhelpful, but genuinely dangerous, because it isn't giving you a real interpretation through that lens at all. It's giving you something softer, sometimes distorted, sometimes outright hallucinated.
+
+That realization led me somewhere deeper: we don't actually know ourselves. And every time we hand a dream, a coincidence, a piece of our own inner life over to something external and let it tell us who we are, we're handing over a responsibility that was never anyone else's to carry.
+
+So I built Dreamwork's framework specifically around the literature of Jung and his collaborators — much of it published by Inner City Books, a real backlog of studies and papers by Jungian analysts who spent their lives with this material. When you actually sit down and read it, you start to see what they were pointing at.
+
+Our culture teaches us that dreams are nonsense, that they don't mean anything — that coincidences are just random noise. But the closer I've looked, the more closely I've listened to what these analysts rediscovered, the more it's revealed something real about our nature and our reality. Through my own journey — paying close attention to what's happening within me and around me — I've come to understand that what we've been taught simply isn't true.
+
+In Jungian psychology, a dream is a compensation for where you actually are on your path of individuation. The psyche doesn't waste a single image — every image is communication, telling you something about where you stand.
+
+We've lost the ability to recognize our own symbolic life. But look closely, even at the surface of our culture, and symbols are everywhere — in royal families, in nations, in the military, in Greek myths, in fairy tales, even in Disney movies. We're surrounded by this language, and most of us have forgotten how to read it.
+
+This app is a tool for self-reflection. A year of working intensively with this material is what's let me start to recognize what these Jungian analysts were actually touching on — something we've all forgotten, distracted as we are by the immediate, external world.
+
+The other reason I built this: everything Jung and his collaborators produced would take lifetimes to work through alone. This app exists to speed that up — not to replace the work, but to give you a structured way into it.
+
+At its core, Dreamwork is a journal. It tracks your dreams and your coincidences — not just in a straight line, but with real consideration for the irrational alongside the rational, holding both instead of collapsing into one. And it picks out patterns according to a structured framework, built directly from the books and papers of the Jungian analysts who came before.
+
+That's why this exists. Typing your dream into a generic language model isn't going to give you a true reading through this lens — it's going to hand you something distorted. I've taken on the responsibility of building a structured framework instead, so I'm not relying on some AI to pat me on the back and tell me I'm doing a good job. That feels wrong. It feels dangerous. Understanding who I am, what my difficulties are, and why they are what they are — that's my responsibility. Not something to hand off.`;
+
+const ABOUT_QUESTION_BANK = `Dreamwork doesn't ask Claude to freestyle a fresh set of questions every session. Every question it can choose from is pre-written, sitting in what the app calls the question bank — organised into stages that roughly follow how a real dream-work conversation tends to unfold. The interpreter picks the single most alive question for the moment from the right stage; it's never allowed to invent one from scratch when a question bank entry already fits, and it's never allowed to ask more than one question at a time.
+
+Orienting comes first, before any symbol or figure work: what feeling stayed with you on waking, where the dream sits in your body, which single image is the one that won't let go. This happens before any interpretation, so the dream is met as itself first.
+
+Symbol and Figure questions come next. The interpreter moves between whichever is more alive — amplifying one image or one figure at a time (water, fire, an animal, a house, a shadow figure, an anima or animus figure, a wise old figure) rather than trying to cover everything in the dream at once.
+
+Alchemical Stage questions ask which of the four classical stages the dream seems to be sitting in — Nigredo (darkness, dissolution), Albedo (first clarity), Citrinitas (something new becoming possible), or Rubedo (integration) — and ask one question suited to that stage.
+
+Typological questions are used sparingly, only when your psychological type is known or the dream strongly suggests it — asking what your least-developed function (thinking, feeling, sensation, or intuition) might be trying to bring you.
+
+Longitudinal questions only appear once you have a journal history. They draw threads between this dream and patterns across past sessions — a symbol that keeps returning, a stage you keep circling back to, a feeling that won't resolve. These are never forced; if there's no genuine pattern, none is asked.
+
+Every session ends with exactly one Closing question, chosen to help you carry something forward without over-interpreting it — never invented on the spot.
+
+Why do it this way, rather than letting Claude improvise? Consistency and restraint. A pre-written bank means the interpreter can't spiral into inventing meaning, can't rush toward a fixed interpretation, and always leaves you with a single, considered question — never a barrage of them.`;
+
+const ABOUT_GLOSSARY = [
+  { term: 'Archetype', def: "A universal pattern or figure that shows up across cultures and individuals — not learned, but built into how the human mind seems to work. The shadow, the wise old figure, and the great mother are all archetypes." },
+  { term: 'The unconscious / collective unconscious', def: "The unconscious is everything happening in your mind that you're not consciously aware of. The collective unconscious is Jung's term for a deeper layer of it that isn't personal to you at all — a layer shared across humanity, where archetypes live." },
+  { term: 'Shadow', def: "The parts of yourself you've rejected, denied, or never developed — not necessarily \"bad,\" just unfamiliar or unacceptable to the person you've decided to be. In dreams it often shows up as a threatening or disturbing figure." },
+  { term: 'Anima / Animus', def: "Jung's terms for an inner figure carrying a psychological quality opposite to your conscious personality — traditionally described as a woman's inner masculine or a man's inner feminine, though what matters is the quality it carries (feeling and imagination, or direction and discrimination), not literal gender." },
+  { term: 'Individuation', def: 'The lifelong process of becoming who you actually are, rather than who you were shaped or pressured to be. Not a destination you arrive at, but an ongoing unfolding.' },
+  { term: 'Complex', def: 'A cluster of emotionally charged memories and associations that acts almost like a separate personality inside you, with its own logic and its own triggers. When a complex is activated, it can make you react far more strongly than the situation seems to call for.' },
+  { term: 'Self (capital S)', def: 'Not your ego or everyday sense of "I," but the deeper organising centre of your whole psyche, conscious and unconscious together. Symbols like gold, a circle, or a wise figure often represent the Self.' },
+  { term: 'Compensation', def: "Jung's idea that dreams exist partly to balance out what your conscious life has been ignoring or overdoing. A dream isn't random noise — it's often correcting something." },
+  { term: 'Inflation', def: 'When a person becomes identified with something bigger than themselves — a sense of special destiny, cosmic importance, or grandiosity — rather than staying in a respectful, conscious relationship to it.' },
+  { term: 'Numinous', def: "Rudolf Otto's word (borrowed by Jung) for the felt quality of something sacred, awe-inspiring, or larger than ordinary life. Big dreams tend to carry this quality; ordinary dreams usually don't." },
+  { term: 'Synchronicity', def: "A meaningful coincidence between something happening inside you (a thought, feeling, dream) and something happening in the outer world, where the two can't be explained as cause and effect but still feel connected." },
+  { term: 'The four alchemical stages', def: 'Nigredo (blackening) — necessary darkness and dissolution. Albedo (whitening) — the first clarity after it. Citrinitas (yellowing) — something new becoming possible. Rubedo (reddening) — integration, when opposites come together into something more whole.' },
+];
+
+const ABOUT_BOOKS = [
+  {
+    group: 'The core five — present in nearly every reading',
+    items: [
+      { title: 'C.G. Jung', text: "The founder of this whole tradition. His core ideas — the unconscious, archetypes, individuation, compensation — run underneath everything Dreamwork does." },
+      { title: 'Marie-Louise von Franz', text: "Jung's closest collaborator, and the main source for the alchemical and fairy-tale material, plus almost everything Dreamwork knows about synchronicity." },
+      { title: 'James Hillman — Re-Visioning Psychology, The Dream and the Underworld', text: "A later, more radical voice. His work pushes against interpreting a dream image too quickly, treating dream figures as having their own reality rather than as your personal traits in costume." },
+      { title: 'Edward Edinger — Ego and Archetype, Anatomy of the Psyche, the Mysterium Lectures', text: 'The main source for the alchemical operations (calcinatio, solutio, coagulatio, and others) and for the "ego-Self axis" — the relationship between your everyday sense of self and the deeper organising centre of the psyche.' },
+      { title: 'Robert Moore', text: 'His "Dragon Laws" are the framework Dreamwork uses to recognise inflation and grandiosity — gently, as an observation, when they show up.' },
+    ],
+  },
+  {
+    group: 'Widening the picture — added later',
+    items: [
+      { title: "Jung — Psychological Types", text: "The basis for Dreamwork's typological questions: what your dominant psychological function is, and what your least-developed one might be trying to bring you through your dreams." },
+      { title: 'Edinger — The Creation of Consciousness', text: 'Adds a section on what Jung called the unconscious God-image, for the rare dream that produces something genuinely too large to be personal.' },
+      { title: 'Robert Johnson — She, He, We', text: 'Three short books reading old myths (Eros and Psyche, the Grail legend, Tristan and Iseult) as maps of how "the feminine," "the masculine," and romantic love mature psychologically. This isn\'t about gender roles — everyone carries both capacities.' },
+      { title: 'James Hollis — What Matters Most, Finding Meaning in the Second Half of Life', text: "More plainly-spoken reflections on adult life: the old fears still running the show, the difference between a career and a genuine calling, what to do with the parts of a life that can't be fixed." },
+      { title: 'Clarissa Pinkola Estés — Women Who Run With the Wolves', text: 'Fairy tales and myths read as a map of instinct, intuition, and creative fire — the part of the psyche most people are taught to tame or apologise for.' },
+      { title: 'Marion Woodman — The Pregnant Virgin', text: 'On the body-soul connection, and on the space of not-yet-formed possibility that comes before something new is ready to be born.' },
+      { title: 'Sylvia Brinton Perera — Descent to the Goddess', text: "A map for a specific, harder kind of dream: a dark, indifferent, non-nurturing feminine power that can't be talked round or defeated, only met on its own terms." },
+      { title: 'Marion Woodman — Addiction to Perfection', text: 'Used narrowly, as a pattern — the disciplined, high-achieving persona and the ravenous energy building underneath it — rather than through its own case material, which centres on eating disorders. Dreamwork deliberately keeps this lens away from any dream involving food, weight, or body image.' },
+    ],
+  },
+  {
+    group: "Working quietly in the background — shaping how the interpreter behaves, not directly quoted",
+    items: [
+      { title: 'Barbara Hannah — Encounters with the Soul', text: "The reason Dreamwork never walks you through active imagination (talking back to a dream figure, continuing an encounter). Hannah's firsthand accounts of working alongside Jung show how genuinely risky that technique is without a trained analyst present in real time." },
+      { title: 'Donald Kalsched — The Inner World of Trauma', text: 'Shapes how the interpreter recognises when a "protector" figure in a dream has turned harmful — asking it to slow down rather than push toward the usual questions, and to soften and point toward the app\'s crisis resources if anything reads as real distress rather than dream material.' },
+    ],
+  },
+];
+
+function AboutSection({ title, open, onToggle, children }) {
+  return (
+    <div style={{ marginBottom: 14, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+      <button onClick={onToggle} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: open ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.02)', border: 'none', padding: '14px 18px', cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontFamily: 'system-ui,sans-serif', fontSize: 13, letterSpacing: '0.04em', color: C.gold }}>{title}</span>
+        <span style={{ color: 'rgba(201,168,76,0.5)', fontSize: 13 }}>{open ? '−' : '+'}</span>
+      </button>
+      {open && <div style={{ padding: '4px 18px 18px' }}>{children}</div>}
+    </div>
+  );
+}
+
+function AboutPanel() {
+  const [openKey, setOpenKey] = useState('why');
+  const toggle = key => setOpenKey(k => (k === key ? null : key));
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+      <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 11, color: 'rgba(201,168,76,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16 }}>About Dreamwork</div>
+
+      <AboutSection title="Why I built this" open={openKey === 'why'} onToggle={() => toggle('why')}>
+        {ABOUT_WHY_BUILT.split('\n\n').map((p, i) => (
+          <p key={i} style={{ fontSize: 14, fontFamily: 'Georgia,serif', color: '#C8C0B0', lineHeight: 1.8, margin: '0 0 14px' }}>{p}</p>
+        ))}
+      </AboutSection>
+
+      <AboutSection title="How the question bank works" open={openKey === 'bank'} onToggle={() => toggle('bank')}>
+        {ABOUT_QUESTION_BANK.split('\n\n').map((p, i) => (
+          <p key={i} style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.8, margin: '0 0 14px' }}>{p}</p>
+        ))}
+      </AboutSection>
+
+      <AboutSection title="Jungian terms, plainly explained" open={openKey === 'glossary'} onToggle={() => toggle('glossary')}>
+        {ABOUT_GLOSSARY.map((g, i) => (
+          <div key={i} style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 13, color: C.gold, marginBottom: 4 }}>{g.term}</div>
+            <div style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.7 }}>{g.def}</div>
+          </div>
+        ))}
+      </AboutSection>
+
+      <AboutSection title="The books & papers behind it" open={openKey === 'books'} onToggle={() => toggle('books')}>
+        {ABOUT_BOOKS.map((group, gi) => (
+          <div key={gi} style={{ marginBottom: 22 }}>
+            <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 11, color: 'rgba(201,168,76,0.55)', letterSpacing: '0.05em', marginBottom: 10 }}>{group.group}</div>
+            {group.items.map((b, bi) => (
+              <div key={bi} style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 13, color: C.gold, marginBottom: 4 }}>{b.title}</div>
+                <div style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.7 }}>{b.text}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </AboutSection>
+    </div>
+  );
+}
+
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState('chat');
@@ -901,9 +1047,9 @@ export default function App() {
             )}
           </div>
           <div style={{ display:'flex', gap:8 }}>
-            {['chat','journal','settings'].map(t => (
+            {['chat','journal','about','settings'].map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? 'rgba(201,168,76,0.12)' : 'none', border:`1px solid ${tab===t ? 'rgba(201,168,76,0.35)' : 'rgba(201,168,76,0.15)'}`, color: tab===t ? C.gold : (t === 'settings' && !apiKey ? '#D0A050' : C.muted), fontSize:11, letterSpacing:'0.07em', textTransform:'uppercase', padding:'9px 14px', minHeight:38, borderRadius:6, cursor:'pointer', fontFamily:'inherit' }}>
-                {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : t === 'settings' ? `Settings${!apiKey ? ' •' : ''}` : 'Dream'}
+                {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : t === 'settings' ? `Settings${!apiKey ? ' •' : ''}` : t === 'about' ? 'About' : 'Dream'}
               </button>
             ))}
           </div>
@@ -1102,6 +1248,9 @@ export default function App() {
           )}
         </div>
       )}
+
+      {/* About tab */}
+      {tab === 'about' && <AboutPanel />}
 
       {/* Settings tab */}
       {tab === 'settings' && (
