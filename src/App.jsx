@@ -595,6 +595,97 @@ function AboutPanel() {
   );
 }
 
+// ─── TIPS TAB CONTENT ───────────────────────────────────────────────────────
+// TIPS_GENERAL is a plain array of strings — add a new tip any time by adding
+// a new line to the array. No other changes needed.
+
+const TIPS_TECHNIQUES = [
+  {
+    title: 'Capture the dream before it fades',
+    description: "The moment you wake up is when a dream is most alive — and the fastest thing to fade. Set up your phone's voice recorder so it's one tap away, right from your lock screen or the pull-down panel, and speak the dream out loud while you're still half in it. Don't worry about making it coherent. Most recorders will transcribe it for you afterward — not perfectly, but that raw, jumbled transcript is often more useful than a tidy summary written once you're fully awake, because it still carries the shape and feeling of the dream. Copy that transcript straight into Dreamwork's journal.",
+    iphone: [
+      'Open Settings, then tap Control Center',
+      'Find Voice Memos in the list and tap the green + to add it',
+      'From now on, swipe down from the top-right corner of your screen (or up from the bottom edge on older iPhones) to open Control Center',
+      'Tap the Voice Memos icon to start recording immediately',
+      'Afterward, open the recording in Voice Memos and copy the transcript (or just play it back and type as you listen)',
+      'Paste it into a new entry in Dreamwork',
+    ],
+    android: [
+      'Pull down twice from the top of the screen to open Quick Settings, then tap the pencil/edit icon',
+      'Look for "Voice Recorder" or "Sound Recorder" in the tile list and drag it into your active tiles',
+      "If it's not available as a tile on your phone, add a Recorder widget to your home screen instead",
+      'Pull down twice and tap the tile to start recording straight away',
+      'Most recorder apps (including Google\'s Recorder app on Pixel phones) transcribe automatically — open the recording afterward and copy the text',
+      'Paste it into a new entry in Dreamwork',
+    ],
+  },
+  {
+    title: 'Hear your interpretation read aloud',
+    description: "Your phone can read any screen out loud, hands-free — useful lying in bed, or simply as another way of taking in an interpretation besides reading it.",
+    iphone: [
+      'Open Settings, then Accessibility, then Spoken Content',
+      'Turn on "Speak Screen"',
+      '(Optional) adjust the speaking rate on the same screen',
+      'On any screen you want read aloud, swipe down with two fingers from the very top of the screen',
+      'A small control bar appears — tap play to keep listening, or pause and skip as you like',
+    ],
+    android: [
+      'Open Settings, then Accessibility, then Select to Speak (naming may vary slightly by phone)',
+      'Turn it on',
+      'A small floating icon appears on your screen',
+      'Tap it, then tap the play control to read the whole screen — or drag your finger over specific text to hear just that part',
+      'Exact wording varies a little between Android versions and phone brands — look under Accessibility if these steps don\'t match exactly',
+    ],
+  },
+];
+
+const TIPS_GENERAL = [
+  "If an interpretation doesn't quite land, just ask for it again in simpler words. There's no benefit to nodding along with something you didn't really follow.",
+  "Before ending a session, read back through the full interpretation once more. Often something only lands on a second pass, once you're not mid-conversation anymore.",
+  "If something does land — a feeling, a memory, an image rising up — pause and actually sit with it for a moment rather than rushing past it.",
+  "If you can, bring whatever surfaced back into the conversation. Telling Dreamwork what just came up is often where the most useful part of a session happens.",
+];
+
+function StepList({ items }) {
+  return (
+    <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+      {items.map((s, i) => (
+        <li key={i} style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.7, marginBottom: 6 }}>{s}</li>
+      ))}
+    </ol>
+  );
+}
+
+function TipsPanel() {
+  const [openKey, setOpenKey] = useState('t0');
+  const toggle = key => setOpenKey(k => (k === key ? null : key));
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+      <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 11, color: 'rgba(201,168,76,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16 }}>Tips</div>
+
+      {TIPS_TECHNIQUES.map((t, ti) => (
+        <AboutSection key={ti} title={t.title} open={openKey === `t${ti}`} onToggle={() => toggle(`t${ti}`)}>
+          <p style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.8, margin: '0 0 16px' }}>{t.description}</p>
+          <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 13, color: C.gold, marginBottom: 2 }}>On iPhone</div>
+          <StepList items={t.iphone} />
+          <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 13, color: C.gold, margin: '18px 0 2px' }}>On Android</div>
+          <StepList items={t.android} />
+        </AboutSection>
+      ))}
+
+      <AboutSection title="More tips from experience" open={openKey === 'general'} onToggle={() => toggle('general')}>
+        <ul style={{ margin: 0, paddingLeft: 20 }}>
+          {TIPS_GENERAL.map((tip, i) => (
+            <li key={i} style={{ fontSize: 14, fontFamily: 'system-ui,sans-serif', color: C.muted, lineHeight: 1.8, marginBottom: 12 }}>{tip}</li>
+          ))}
+        </ul>
+      </AboutSection>
+    </div>
+  );
+}
+
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState('chat');
@@ -1051,9 +1142,9 @@ export default function App() {
             )}
           </div>
           <div style={{ display:'flex', gap:8 }}>
-            {['chat','journal','about','settings'].map(t => (
+            {['chat','journal','about','tips','settings'].map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? 'rgba(201,168,76,0.12)' : 'none', border:`1px solid ${tab===t ? 'rgba(201,168,76,0.35)' : 'rgba(201,168,76,0.15)'}`, color: tab===t ? C.gold : (t === 'settings' && !apiKey ? '#D0A050' : C.muted), fontSize:11, letterSpacing:'0.07em', textTransform:'uppercase', padding:'9px 14px', minHeight:38, borderRadius:6, cursor:'pointer', fontFamily:'inherit' }}>
-                {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : t === 'settings' ? `Settings${!apiKey ? ' •' : ''}` : t === 'about' ? 'About' : 'Dream'}
+                {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : t === 'settings' ? `Settings${!apiKey ? ' •' : ''}` : t === 'about' ? 'About' : t === 'tips' ? 'Tips' : 'Dream'}
               </button>
             ))}
           </div>
@@ -1255,6 +1346,9 @@ export default function App() {
 
       {/* About tab */}
       {tab === 'about' && <AboutPanel />}
+
+      {/* Tips tab */}
+      {tab === 'tips' && <TipsPanel />}
 
       {/* Settings tab */}
       {tab === 'settings' && (
