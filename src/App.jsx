@@ -1132,22 +1132,20 @@ export default function App() {
       {/* Header */}
       <div style={{ padding:'20px 20px 0', paddingTop:'calc(env(safe-area-inset-top, 0px) + 30px)', flexShrink:0 }}>
         <div style={{ height:1, background:`linear-gradient(90deg,transparent,${C.gold},transparent)`, marginBottom:12 }} />
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:12, borderBottom:`1px solid ${C.border}` }}>
-          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-            <span style={{ color:C.gold, fontSize:16, letterSpacing:'0.14em', textTransform:'uppercase', fontWeight:300 }}>Dreamwork</span>
-            {hasMessages && mode && (
-              <span style={{ fontSize:10, fontFamily:'system-ui,sans-serif', color:'rgba(201,168,76,0.45)', letterSpacing:'0.1em', textTransform:'uppercase' }}>
-                {mode === 'dream' ? 'Dream session' : 'Synchronicity session'}
-              </span>
-            )}
-          </div>
-          <div style={{ display:'flex', gap:8 }}>
-            {['chat','journal','about','tips','settings'].map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? 'rgba(201,168,76,0.12)' : 'none', border:`1px solid ${tab===t ? 'rgba(201,168,76,0.35)' : 'rgba(201,168,76,0.15)'}`, color: tab===t ? C.gold : (t === 'settings' && !apiKey ? '#D0A050' : C.muted), fontSize:11, letterSpacing:'0.07em', textTransform:'uppercase', padding:'9px 14px', minHeight:38, borderRadius:6, cursor:'pointer', fontFamily:'inherit' }}>
-                {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : t === 'settings' ? `Settings${!apiKey ? ' •' : ''}` : t === 'about' ? 'About' : t === 'tips' ? 'Tips' : 'Dream'}
-              </button>
-            ))}
-          </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:2, paddingBottom:12, borderBottom:`1px solid ${C.border}` }}>
+          <span style={{ color:C.gold, fontSize:16, letterSpacing:'0.14em', textTransform:'uppercase', fontWeight:300 }}>Dreamwork</span>
+          {hasMessages && mode && (
+            <span style={{ fontSize:10, fontFamily:'system-ui,sans-serif', color:'rgba(201,168,76,0.45)', letterSpacing:'0.1em', textTransform:'uppercase' }}>
+              {mode === 'dream' ? 'Dream session' : 'Synchronicity session'}
+            </span>
+          )}
+        </div>
+        <div style={{ display:'flex', gap:6, marginTop:12 }}>
+          {['chat','journal','about','tips','settings'].map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flex:1, minWidth:0, background: tab===t ? 'rgba(201,168,76,0.12)' : 'none', border:`1px solid ${tab===t ? 'rgba(201,168,76,0.35)' : 'rgba(201,168,76,0.15)'}`, color: tab===t ? C.gold : (t === 'settings' && !apiKey ? '#D0A050' : C.muted), fontSize:10, letterSpacing:'0.03em', textTransform:'uppercase', padding:'9px 4px', minHeight:38, borderRadius:6, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+              {t === 'journal' ? `Journal${journal.length ? ` (${journal.length})` : ''}` : t === 'settings' ? `Settings${!apiKey ? ' •' : ''}` : t === 'about' ? 'About' : t === 'tips' ? 'Tips' : 'Dream'}
+            </button>
+          ))}
         </div>
       </div>
 
