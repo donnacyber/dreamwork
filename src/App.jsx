@@ -261,7 +261,8 @@ function EntryDetail({ entry, onBack, onSave }) {
   const [dirty, setDirty] = useState(false);
 
   function save() {
-    onSave({ ...entry, title, savedAt: new Date(dateStr).getTime() || entry.savedAt });
+    const titleAuto = title !== entry.title ? false : entry.titleAuto;
+    onSave({ ...entry, title, titleAuto, savedAt: new Date(dateStr).getTime() || entry.savedAt });
     setDirty(false);
   }
 
@@ -645,6 +646,9 @@ const TIPS_GENERAL = [
   "Before ending a session, read back through the full interpretation once more. Often something only lands on a second pass, once you're not mid-conversation anymore.",
   "If something does land — a feeling, a memory, an image rising up — pause and actually sit with it for a moment rather than rushing past it.",
   "If you can, bring whatever surfaced back into the conversation. Telling Dreamwork what just came up is often where the most useful part of a session happens.",
+  "Try to hold whatever comes up lightly, through the day and not just in the session — feelings, images, a mood that lingers. Practice being the observer of it, the witness, rather than the one trying to steer it somewhere.",
+  "It's fine to simply not know. If a question doesn't have an answer for you, say so rather than forcing one — that's the same honesty as holding a feeling lightly, not pushing or pulling it into shape, just being with it. Not knowing is part of the process too.",
+  "Crying, a lump in the throat, goosebumps — these are often a sign that something true has actually been touched. Worth noticing, not brushing past.",
 ];
 
 function StepList({ items }) {
@@ -685,6 +689,10 @@ function TipsPanel() {
     </div>
   );
 }
+
+// The model used for both the interpreter itself and the small behind-the-
+// scenes call that names each journal entry (see generateTitle below).
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function App() {
@@ -783,6 +791,60 @@ export default function App() {
   // Sends a given message history to Claude and handles the reply.
   // Separated from send() so a failed attempt can be retried with the
   // exact same history, without the person needing to retype anything.
+  // Guards against a slow title request landing after a newer one for the
+  // same entry — only the most recent request for a given entry is allowed
+  // to actually write a title.
+  const titleGenToken = useRef({});
+
+  // A small, separate call to Claude — not part of the interpretation
+  // itself — that reads the conversation so far and names it in a few
+  // words. Costs a negligible amount on top of the session (max 20 tokens
+  // of output). Failures are silent: the placeholder title just stays put.
+  async function generateTitle(msgs) {
+    try {
+      const convoText = msgs.map(m => `${m.role === 'user' ? 'Dreamer' : 'Interpreter'}: ${m.content}`).join('\n\n').slice(0, 6000);
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: CLAUDE_MODEL,
+          max_tokens: 20,
+          system: 'You name journal entries. Read the dream or coincidence conversation below and reply with ONLY a short title of 3 to 6 words, naming its central theme or image in plain language. No quotation marks, no punctuation at the end, no preamble — the title text and nothing else.',
+          messages: [{ role: 'user', content: convoText }],
+        }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const text = (data?.content?.[0]?.text || '').trim().replace(/^["']+|["']+$/g, '').replace(/\.$/, '');
+      return text || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Fires off a title request for one entry and, if it comes back before
+  // anything newer has superseded it and nobody's retitled the entry by
+  // hand in the meantime, replaces the placeholder title with it.
+  async function refreshEntryTitle(entryId, msgs) {
+    const myToken = (titleGenToken.current[entryId] || 0) + 1;
+    titleGenToken.current[entryId] = myToken;
+    const newTitle = await generateTitle(msgs);
+    if (!newTitle) return;
+    if (titleGenToken.current[entryId] !== myToken) return; // superseded
+    setJournal(prevJournal => {
+      const entry = prevJournal.find(e => e.id === entryId);
+      if (!entry || entry.titleAuto === false) return prevJournal; // hand-edited since
+      const updatedEntry = { ...entry, title: newTitle };
+      idbPutEntry(updatedEntry);
+      return prevJournal.map(e => (e.id === entryId ? updatedEntry : e));
+    });
+  }
+
   async function callClaude(history) {
     setErrorMsg('');
     setLoading(true);
@@ -805,7 +867,7 @@ export default function App() {
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: CLAUDE_MODEL,
           max_tokens: 3000,
           // Automatic prompt caching: the system prompt here is large (tens
           // of thousands of tokens), and without this, every single message
@@ -915,9 +977,10 @@ export default function App() {
     const lastUser = [...msgs].reverse().find(m => m.role === 'user' && msgs.indexOf(m) > 0);
     const closingWord = lastUser && lastUser.content.split(' ').length <= 8 ? lastUser.content : '';
 
+    let changedEntry;
+
     setJournal(prevJournal => {
       let updated;
-      let changedEntry;
       if (currentEntryId && prevJournal.some(e => e.id === currentEntryId)) {
         // Update existing entry in place
         updated = prevJournal.map(e => {
@@ -931,7 +994,10 @@ export default function App() {
         changedEntry = {
           id: newId,
           savedAt: Date.now(),
+          // Placeholder shown instantly; refreshEntryTitle below swaps it
+          // for a theme-based title a moment later, once Claude's named it.
           title: dreamText.split(' ').slice(0, 6).join(' ') + '…',
+          titleAuto: true,
           dreamText,
           messages: msgs,
           stage,
@@ -953,6 +1019,13 @@ export default function App() {
       return updated;
     });
     setSessionSaved(true);
+
+    // Ask Claude to name the entry from what's actually been said, once
+    // there's a real exchange to name — skipped if someone's already
+    // retitled this entry by hand.
+    if (changedEntry && changedEntry.titleAuto !== false) {
+      refreshEntryTitle(changedEntry.id, msgs);
+    }
   }
 
   function newSession() {
